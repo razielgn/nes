@@ -53,13 +53,14 @@ impl<'rom> Cpu<'rom> {
 
     pub fn step(&mut self) {
         use self::AddressingMode::*;
-        use self::OpCode::*;
+        use self::Label::*;
 
         let instr = self.fetch();
 
-        match (instr.code, instr.mode) {
+        match (instr.label, instr.mode) {
             (JMP, Absolute(addr)) => {
                 self.pc = addr;
+                self.cycles += 3;
             }
             (JSR, Absolute(addr)) => {
                 let ret = self.pc + 3;
@@ -70,6 +71,7 @@ impl<'rom> Cpu<'rom> {
                 self.push(low);
 
                 self.pc = addr;
+                self.cycles += 6;
             }
             (LDX, Immediate(v)) => {
                 let val = self.memory.fetch(v as u16);
@@ -78,77 +80,86 @@ impl<'rom> Cpu<'rom> {
 
                 self.x = val;
                 self.pc += 2;
+                self.cycles += 2;
             }
             (STX, ZeroPage(v)) => {
                 self.memory.store(v as u16, self.x);
                 self.pc += 2;
+                self.cycles += 3;
             }
             (NOP, Implicit) => {
                 self.pc += 1;
+                self.cycles += 2;
             }
             (SEC, Implicit) => {
                 self.p.set_carry(true);
                 self.pc += 1;
+                self.cycles += 2;
             }
             (CLC, Implicit) => {
                 self.p.set_carry(false);
                 self.pc += 1;
+                self.cycles += 2;
             }
             (BCS, Relative(offset)) => {
                 if self.p.is_carry() {
-                    self.pc = if (offset as i16) < 0 {
-                        self.pc - offset as u16
-                    } else {
-                        self.pc + offset as u16
-                    };
+                    self.apply_offset_to_pc(offset);
+                    self.cycles += 1;
                 }
 
                 self.pc += 2;
+                self.cycles += 2;
             }
             (BCC, Relative(offset)) => {
                 if !self.p.is_carry() {
-                    self.pc = if (offset as i16) < 0 {
-                        self.pc - offset as u16
-                    } else {
-                        self.pc + offset as u16
-                    };
+                    self.apply_offset_to_pc(offset);
+                    self.cycles += 1;
                 }
 
                 self.pc += 2;
+                self.cycles += 2;
             }
             _ => panic!("can't execute {:?}", instr),
         }
-
-        self.cycles += instr.cycles(self.p);
     }
 
     fn fetch(&self) -> Instruction {
         use self::AddressingMode::*;
-        use self::OpCode::*;
+        use self::Label::*;
 
         let next = self.pc + 1;
-        let (code, mode) = match self.memory.fetch(self.pc) {
+        let op = self.memory.fetch(self.pc);
+        let (label, mode) = match op {
             0x18 => (CLC, Implicit),
             0x20 => (JSR, Absolute(self.memory.fetch_double(next))),
             0x38 => (SEC, Implicit),
             0x4c => (JMP, Absolute(self.memory.fetch_double(next))),
             0x86 => (STX, ZeroPage(self.memory.fetch(next))),
             0xa2 => (LDX, Immediate(self.memory.fetch(next))),
-            0xb0 => (BCS, Relative(self.memory.fetch(next))),
+            0xb0 => (BCS, Relative(self.memory.fetch(next) as i8)),
             0xea => (NOP, Implicit),
-            0x90 => (BCC, Relative(self.memory.fetch(next))),
-            code => panic!("unknown opcode: 0x{:X}", code),
+            0x90 => (BCC, Relative(self.memory.fetch(next) as i8)),
+            op => panic!("unknown opcode: 0x{:X}", op),
         };
 
         Instruction {
             mode: mode,
-            code: code,
+            label: label,
+            op: op,
         }
     }
 
     fn push(&mut self, val: u8) {
         self.memory.store(0x100 + self.sp as u16, val);
         self.sp -= 1;
+    }
+
+    fn apply_offset_to_pc(&mut self, offset: i8) {
+        self.pc = if offset < 0 {
+            self.pc - offset as u16
+        } else {
+            self.pc + offset as u16
+        };
     }
 }
 
@@ -174,14 +185,14 @@ impl P {
 
     fn set_carry(&mut self, state: bool) {
         if state {
-            self.0 |= 1 << 0;
+            self.0 |= 1;
         } else {
-            self.0 &= !(1 << 0);
+            self.0 &= !1;
         }
     }
 
     fn is_carry(&self) -> bool {
-        (self.0 >> 0) & 1 == 1
+        self.0 & 1 == 1
     }
 }
 
@@ -266,7 +277,7 @@ pub enum AddressingMode {
     ZeroPage(u8),
     ZeroPageX(u8),
     ZeroPageY(u8),
-    Relative(u8),
+    Relative(i8),
     Absolute(u16),
     AbsoluteX(u16),
     AbsoluteY(u16),
@@ -278,75 +289,34 @@ pub enum AddressingMode {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Instruction {
     mode: AddressingMode,
-    code: OpCode,
+    label: Label,
+    op: u8,
 }
 
 impl Instruction {
-    pub fn cycles(&self, p: P) -> usize {
-        use self::AddressingMode::*;
-        use self::OpCode::*;
-
-        match (self.code, self.mode) {
-            (JMP, Absolute(..)) => 3,
-            (JSR, Absolute(..)) => 6,
-            (LDX, Immediate(..)) => 2,
-            (STX, ZeroPage(..)) => 3,
-            (NOP, Implicit) => 2,
-            (SEC, Implicit) => 2,
-            (CLC, Implicit) => 2,
-            (BCS, Relative(..)) => if p.is_carry() { 3 } else { 2 },
-            (BCC, Relative(..)) => if !p.is_carry() { 3 } else { 2 },
-            _ => {
-                panic!("can't calculate cycles for ({:?}, {:?})",
-                        self.code,
-                        self.mode)
-            }
-        }
-    }
-
     pub fn bytecode(&self) -> String {
         use self::AddressingMode::*;
-        use self::OpCode::*;
-
-        let op = match (self.code, self.mode) {
-            (JMP, Absolute(..)) => 0x4c,
-            (JMP, Indirect(..)) => 0x6c,
-            (LDX, Immediate(..)) => 0xa2,
-            (LDX, ZeroPage(..)) => 0xa6,
-            (LDX, ZeroPageY(..)) => 0xb6,
-            (LDX, Absolute(..)) => 0xae,
-            (LDX, AbsoluteY(..)) => 0xbe,
-            (STX, ZeroPage(..)) => 0x86,
-            (JSR, Absolute(..)) => 0x20,
-            (NOP, Implicit) => 0xea,
-            (SEC, Implicit) => 0x38,
-            (BCS, Relative(..)) => 0xb0,
-            (BCC, Relative(..)) => 0x90,
-            (CLC, Implicit) => 0x18,
-            _ => 0xff,
-        };
 
         let args = match self.mode {
             Absolute(addr) => format!("{:02X} {:02X}", addr as u8, addr >> 8),
-            Immediate(val) | ZeroPage(val) | Relative(val) => {
-                format!("{:02X}", val)
-            }
-            _ => format!(""),
+            Immediate(val) | ZeroPage(val) => format!("{:02X}", val),
+            Relative(val) => format!("{:02X}", val as u8),
+            _ => "".into(),
         };
 
-        format!("{:02X} {:6}", op, args)
+        format!("{:02X} {:6}", self.op, args)
     }
 
     pub fn to_string(&self, s: &CpuState) -> String {
         use self::AddressingMode::*;
-        use self::OpCode::*;
+        use self::Label::*;
 
-        let args = match (self.mode, self.code) {
+        let args = match (self.mode, self.label) {
             (Absolute(addr), _) => format!("${:04X}", addr),
             (Immediate(val), _) => format!("#${:02X}", val),
             (ZeroPage(addr), STX) => format!("${:02X} = {:02X}", addr, s.x),
             (Relative(offset), _) => {
-                let addr = if (offset as i16) < 0 {
+                let addr = if offset < 0 {
                     s.pc - offset as u16
                 } else {
                     s.pc + offset as u16
@@ -354,16 +324,16 @@ impl Instruction {
 
                 format!("${:04X}", addr + 2)
             }
-            _ => format!(""),
+            _ => "".into(),
         };
 
-        format!("{:?} {}", self.code, args)
+        format!("{:?} {}", self.label, args)
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(dead_code, non_snake_case)]
-pub enum OpCode {
+pub enum Label {
     ADC,
     AND,
     ASL,
