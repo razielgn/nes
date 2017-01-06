@@ -65,20 +65,20 @@ impl<'rom> Cpu<'rom> {
                 self.cycles += 3;
             }
             (JSR, Absolute(addr)) => {
-                let ret = self.pc + 3;
-
-                let hi = (ret >> 8) as u8;
-                self.push(hi);
-                let low = ret as u8;
-                self.push(low);
+                let ret = self.pc + 2;
+                self.push_double(ret);
 
                 self.pc = addr;
                 self.cycles += 6;
             }
             (RTS, Implied) => {
-                let low = self.pop() as u16;
-                let hi = (self.pop() as u16) << 8;
-                self.pc = hi | low;
+                self.pc = self.pop_double() + 1;
+                self.cycles += 6;
+            }
+            (RTI, Implied) => {
+                self.pop_p();
+
+                self.pc = self.pop_double();
                 self.cycles += 6;
             }
             (PHP, Implied) => {
@@ -98,16 +98,13 @@ impl<'rom> Cpu<'rom> {
             }
             (PLA, Implied) => {
                 self.a = self.pop();
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
 
                 self.pc += 1;
                 self.cycles += 4;
             }
             (PLP, Implied) => {
-                self.p = self.pop().into();
-                self.p.unset(BreakCommand);
-                self.p.set(UnusedFlag);
+                self.pop_p();
 
                 self.pc += 1;
                 self.cycles += 4;
@@ -128,8 +125,7 @@ impl<'rom> Cpu<'rom> {
                     }
                     _ => unimplemented!(),
                 };
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
             }
             (LDX, mode) => {
                 self.x = match mode {
@@ -147,8 +143,7 @@ impl<'rom> Cpu<'rom> {
                     }
                     _ => unimplemented!(),
                 };
-                self.p.set_if_zero(self.x);
-                self.p.set_if_negative(self.x);
+                self.p.set_if_zn(self.x);
             }
             (LDY, mode) => {
                 self.y = match mode {
@@ -166,8 +161,7 @@ impl<'rom> Cpu<'rom> {
                     }
                     _ => unimplemented!(),
                 };
-                self.p.set_if_zero(self.y);
-                self.p.set_if_negative(self.y);
+                self.p.set_if_zn(self.y);
             }
             (STX, mode) => {
                 let addr = match mode {
@@ -273,8 +267,7 @@ impl<'rom> Cpu<'rom> {
             (AND, Immediate(m)) => {
                 self.a &= m;
 
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
 
                 self.pc += 2;
                 self.cycles += 2;
@@ -282,8 +275,7 @@ impl<'rom> Cpu<'rom> {
             (ORA, Immediate(m)) => {
                 self.a |= m;
 
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
 
                 self.pc += 2;
                 self.cycles += 2;
@@ -291,8 +283,7 @@ impl<'rom> Cpu<'rom> {
             (EOR, Immediate(m)) => {
                 self.a ^= m;
 
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
 
                 self.pc += 2;
                 self.cycles += 2;
@@ -334,8 +325,7 @@ impl<'rom> Cpu<'rom> {
                 self.p.set_if(OverflowFlag,
                               (self.a ^ sum) & 0x80 != 0 &&
                               (self.a ^ m) & 0x80 == 0);
-                self.p.set_if_zero(sum);
-                self.p.set_if_negative(sum);
+                self.p.set_if_zn(sum);
 
                 self.a = sum;
                 self.pc += 2;
@@ -351,8 +341,7 @@ impl<'rom> Cpu<'rom> {
                 self.p.set_if(OverflowFlag,
                               (self.a ^ sub) & 0x80 != 0 &&
                               (self.a ^ m) & 0x80 != 0);
-                self.p.set_if_zero(sub);
-                self.p.set_if_negative(sub);
+                self.p.set_if_zn(sub);
 
                 self.a = sub;
                 self.pc += 2;
@@ -360,64 +349,56 @@ impl<'rom> Cpu<'rom> {
             }
             (INY, Implied) => {
                 self.y = self.y.wrapping_add(1);
-                self.p.set_if_zero(self.y);
-                self.p.set_if_negative(self.y);
+                self.p.set_if_zn(self.y);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (DEY, Implied) => {
                 self.y = self.y.wrapping_sub(1);
-                self.p.set_if_zero(self.y);
-                self.p.set_if_negative(self.y);
+                self.p.set_if_zn(self.y);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (INX, Implied) => {
                 self.x = self.x.wrapping_add(1);
-                self.p.set_if_zero(self.x);
-                self.p.set_if_negative(self.x);
+                self.p.set_if_zn(self.x);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (DEX, Implied) => {
                 self.x = self.x.wrapping_sub(1);
-                self.p.set_if_zero(self.x);
-                self.p.set_if_negative(self.x);
+                self.p.set_if_zn(self.x);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (TAY, Implied) => {
                 self.y = self.a;
-                self.p.set_if_zero(self.y);
-                self.p.set_if_negative(self.y);
+                self.p.set_if_zn(self.y);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (TAX, Implied) => {
                 self.x = self.a;
-                self.p.set_if_zero(self.x);
-                self.p.set_if_negative(self.x);
+                self.p.set_if_zn(self.x);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (TYA, Implied) => {
                 self.a = self.y;
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
 
                 self.pc += 1;
                 self.cycles += 2;
             }
             (TXA, Implied) => {
                 self.a = self.x;
-                self.p.set_if_zero(self.a);
-                self.p.set_if_negative(self.a);
+                self.p.set_if_zn(self.a);
 
                 self.pc += 1;
                 self.cycles += 2;
@@ -430,8 +411,7 @@ impl<'rom> Cpu<'rom> {
             }
             (TSX, Implied) => {
                 self.x = self.sp;
-                self.p.set_if_zero(self.x);
-                self.p.set_if_negative(self.x);
+                self.p.set_if_zn(self.x);
 
                 self.pc += 1;
                 self.cycles += 2;
@@ -465,7 +445,9 @@ impl<'rom> Cpu<'rom> {
             0x28 => (PLP, Implied),
             0x29 => (AND, self.immediate()),
             0x30 => (BMI, self.relative()),
+            0x35 => (AND, self.zero_page_x()),
             0x38 => (SEC, Implied),
+            0x40 => (RTI, Implied),
             0x48 => (PHA, Implied),
             0x49 => (EOR, self.immediate()),
             0x4C => (JMP, self.absolute()),
@@ -520,9 +502,30 @@ impl<'rom> Cpu<'rom> {
         self.sp -= 1;
     }
 
+    fn push_double(&mut self, val: u16) {
+        let hi = (val >> 8) as u8;
+        let lo = val as u8;
+
+        self.push(hi);
+        self.push(lo);
+    }
+
     fn pop(&mut self) -> u8 {
         self.sp += 1;
         self.memory.fetch(0x100 + self.sp as u16)
+    }
+
+    fn pop_double(&mut self) -> u16 {
+        let lo = self.pop() as u16;
+        let hi = self.pop() as u16;
+
+        hi << 8 | lo
+    }
+
+    fn pop_p(&mut self) {
+        self.p = self.pop().into();
+        self.p.unset(Status::BreakCommand);
+        self.p.set(Status::UnusedFlag);
     }
 
     fn apply_offset_to_pc(&mut self, offset: i8) {
@@ -539,6 +542,10 @@ impl<'rom> Cpu<'rom> {
 
     fn zero_page(&self) -> AddressingMode {
         AddressingMode::ZeroPage(self.memory.fetch(self.pc + 1))
+    }
+
+    fn zero_page_x(&self) -> AddressingMode {
+        AddressingMode::ZeroPageX(self.memory.fetch(self.pc + 1) + self.x)
     }
 
     fn relative(&self) -> AddressingMode {
@@ -568,6 +575,11 @@ struct P(u8);
 impl P {
     fn new() -> Self {
         P(0x24)
+    }
+
+    fn set_if_zn(&mut self, val: u8) {
+        self.set_if_zero(val);
+        self.set_if_negative(val);
     }
 
     fn set_if_zero(&mut self, val: u8) {
