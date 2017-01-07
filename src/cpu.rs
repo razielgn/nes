@@ -67,9 +67,8 @@ impl<'rom> Cpu<'rom> {
                 self.pc = addr;
             }
             JSR => {
-                let ret = self.pc + 2;
-                self.push_double(ret);
-
+                let pc = self.pc;
+                self.push_double(pc - 1);
                 self.pc = addr;
             }
             RTS => {
@@ -134,41 +133,49 @@ impl<'rom> Cpu<'rom> {
             }
             BCS => {
                 if self.p.is_set(CarryFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BCC => {
                 if !self.p.is_set(CarryFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BEQ => {
                 if self.p.is_set(ZeroFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BNE => {
                 if !self.p.is_set(ZeroFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BVS => {
                 if self.p.is_set(OverflowFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BVC => {
                 if !self.p.is_set(OverflowFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BMI => {
                 if self.p.is_set(NegativeFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
             BPL => {
                 if !self.p.is_set(NegativeFlag) {
+                    self.cycles += 1;
                     self.pc = addr;
                 }
             }
@@ -710,6 +717,7 @@ impl Instruction {
             Absolute => format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8),
             Immediate => format!("{:02X}", s.mem.fetch(self.addr)),
             Implied | Accumulator => "".into(),
+            Relative => format!("{:02X}", self.addr - s.pc - 2),
             _ => format!("{:02X}", self.addr as u8),
         };
 
@@ -734,6 +742,7 @@ impl Instruction {
             (_, Relative) => {
                 format!("${:04X}", self.addr)
             }
+            (_, Accumulator) => "A".into(),
             _ => "".into(),
         };
 
