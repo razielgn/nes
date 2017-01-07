@@ -53,269 +53,168 @@ impl<'rom> Cpu<'rom> {
     }
 
     pub fn step(&mut self) {
-        use self::AddressingMode::*;
         use self::Label::*;
         use self::Status::*;
 
         let instr = self.fetch();
+        let addr = instr.addr;
 
-        match (instr.label, instr.mode) {
-            (JMP, Absolute(addr)) => {
+        self.pc += instr.size as u16;
+        self.cycles += instr.cycles as usize;
+
+        match instr.label {
+            JMP => {
                 self.pc = addr;
-                self.cycles += 3;
             }
-            (JSR, Absolute(addr)) => {
+            JSR => {
                 let ret = self.pc + 2;
                 self.push_double(ret);
 
                 self.pc = addr;
-                self.cycles += 6;
             }
-            (RTS, Implied) => {
+            RTS => {
                 self.pc = self.pop_double() + 1;
-                self.cycles += 6;
             }
-            (RTI, Implied) => {
+            RTI => {
                 self.pop_p();
-
                 self.pc = self.pop_double();
-                self.cycles += 6;
             }
-            (PHP, Implied) => {
+            PHP => {
                 let mut p = self.p;
                 p.set(BreakCommand);
                 self.push(p.into());
-
-                self.pc += 1;
-                self.cycles += 3;
             }
-            (PHA, Implied) => {
+            PHA => {
                 let a = self.a;
                 self.push(a);
-
-                self.pc += 1;
-                self.cycles += 3;
             }
-            (PLA, Implied) => {
+            PLA => {
                 self.a = self.pop();
                 self.p.set_if_zn(self.a);
-
-                self.pc += 1;
-                self.cycles += 4;
             }
-            (PLP, Implied) => {
+            PLP => {
                 self.pop_p();
-
-                self.pc += 1;
-                self.cycles += 4;
             }
-            (LDA, mode) => {
-                self.a = match mode {
-                    Immediate(m) => {
-                        self.pc += 2;
-                        self.cycles += 2;
-
-                        m
-                    }
-                    Absolute(addr) => {
-                        self.pc += 3;
-                        self.cycles += 4;
-
-                        self.memory.fetch(addr)
-                    }
-                    _ => unimplemented!(),
-                };
+            LDA => {
+                self.a = self.memory.fetch(addr);
                 self.p.set_if_zn(self.a);
             }
-            (LDX, mode) => {
-                self.x = match mode {
-                    Immediate(m) => {
-                        self.pc += 2;
-                        self.cycles += 2;
-
-                        m
-                    }
-                    Absolute(addr) => {
-                        self.pc += 3;
-                        self.cycles += 4;
-
-                        self.memory.fetch(addr)
-                    }
-                    _ => unimplemented!(),
-                };
+            LDX => {
+                self.x = self.memory.fetch(addr);
                 self.p.set_if_zn(self.x);
             }
-            (LDY, mode) => {
-                self.y = match mode {
-                    Immediate(m) => {
-                        self.pc += 2;
-                        self.cycles += 2;
-
-                        m
-                    }
-                    Absolute(addr) => {
-                        self.pc += 3;
-                        self.cycles += 4;
-
-                        self.memory.fetch(addr)
-                    }
-                    _ => unimplemented!(),
-                };
+            LDY => {
+                self.y = self.memory.fetch(addr);
                 self.p.set_if_zn(self.y);
             }
-            (STX, mode) => {
-                let addr = match mode {
-                    ZeroPage(addr) => {
-                        self.pc += 2;
-                        self.cycles += 3;
-
-                        addr.into()
-                    }
-                    Absolute(addr) => {
-                        self.pc += 3;
-                        self.cycles += 4;
-
-                        addr
-                    }
-                    _ => unimplemented!(),
-                };
-
+            STX => {
                 self.memory.store(addr, self.x);
             }
-            (STA, ZeroPage(addr)) => {
+            STA => {
                 self.memory.store(addr, self.a);
-                self.pc += 2;
-                self.cycles += 3;
             }
-            (NOP, Implied) => {
-                self.pc += 1;
-                self.cycles += 2;
-            }
-            (SEC, Implied) => {
+            NOP => {}
+            SEC => {
                 self.p.set(CarryFlag);
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (SEI, Implied) => {
+            SEI => {
                 self.p.set(InterruptDisable);
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (SED, Implied) => {
+            SED => {
                 self.p.set(DecimalMode);
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (CLC, Implied) => {
+            CLC => {
                 self.p.unset(CarryFlag);
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (CLD, Implied) => {
+            CLD => {
                 self.p.unset(DecimalMode);
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (CLV, Implied) => {
+            CLV => {
                 self.p.unset(OverflowFlag);
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (BCS, Relative(offset)) => {
-                let cond = self.p.is_set(CarryFlag);
-                self.branch_if(cond, offset);
+            BCS => {
+                if self.p.is_set(CarryFlag) {
+                    self.pc = addr;
+                }
             }
-            (BCC, Relative(offset)) => {
-                let cond = !self.p.is_set(CarryFlag);
-                self.branch_if(cond, offset);
+            BCC => {
+                if !self.p.is_set(CarryFlag) {
+                    self.pc = addr;
+                }
             }
-            (BEQ, Relative(offset)) => {
-                let cond = self.p.is_set(ZeroFlag);
-                self.branch_if(cond, offset);
+            BEQ => {
+                if self.p.is_set(ZeroFlag) {
+                    self.pc = addr;
+                }
             }
-            (BNE, Relative(offset)) => {
-                let cond = !self.p.is_set(ZeroFlag);
-                self.branch_if(cond, offset);
+            BNE => {
+                if !self.p.is_set(ZeroFlag) {
+                    self.pc = addr;
+                }
             }
-            (BVS, Relative(offset)) => {
-                let cond = self.p.is_set(OverflowFlag);
-                self.branch_if(cond, offset);
+            BVS => {
+                if self.p.is_set(OverflowFlag) {
+                    self.pc = addr;
+                }
             }
-            (BVC, Relative(offset)) => {
-                let cond = !self.p.is_set(OverflowFlag);
-                self.branch_if(cond, offset);
+            BVC => {
+                if !self.p.is_set(OverflowFlag) {
+                    self.pc = addr;
+                }
             }
-            (BPL, Relative(offset)) => {
-                let cond = !self.p.is_set(NegativeFlag);
-                self.branch_if(cond, offset);
+            BMI => {
+                if self.p.is_set(NegativeFlag) {
+                    self.pc = addr;
+                }
             }
-            (BMI, Relative(offset)) => {
-                let cond = self.p.is_set(NegativeFlag);
-                self.branch_if(cond, offset);
+            BPL => {
+                if !self.p.is_set(NegativeFlag) {
+                    self.pc = addr;
+                }
             }
-            (BIT, ZeroPage(addr)) => {
+            BIT => {
                 let m = self.memory.fetch(addr);
                 let res = self.a & m;
 
                 self.p.set_if_zero(res);
                 self.p.set_if_negative(m);
                 self.p.set_if(OverflowFlag, (m >> 6) & 1 == 1);
-
-                self.pc += 2;
-                self.cycles += 3;
             }
-            (AND, Immediate(m)) => {
-                self.a &= m;
-
+            AND => {
+                self.a &= self.memory.fetch(addr);
                 self.p.set_if_zn(self.a);
-
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (ORA, Immediate(m)) => {
-                self.a |= m;
-
+            ORA => {
+                self.a |= self.memory.fetch(addr);
                 self.p.set_if_zn(self.a);
-
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (EOR, Immediate(m)) => {
-                self.a ^= m;
-
+            EOR => {
+                self.a ^= self.memory.fetch(addr);
                 self.p.set_if_zn(self.a);
-
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (CMP, Immediate(m)) => {
+            CMP => {
+                let m = self.memory.fetch(addr);
                 let n = self.a.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.a >= m);
                 self.p.set_if(NegativeFlag, (n as i8) < 0);
                 self.p.set_if(ZeroFlag, n == 0);
-
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (CPY, Immediate(m)) => {
+            CPY => {
+                let m = self.memory.fetch(addr);
                 let n = self.y.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.y >= m);
                 self.p.set_if(NegativeFlag, (n as i8) < 0);
                 self.p.set_if(ZeroFlag, n == 0);
-
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (CPX, Immediate(m)) => {
+            CPX => {
+                let m = self.memory.fetch(addr);
                 let n = self.x.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.x >= m);
                 self.p.set_if(NegativeFlag, (n as i8) < 0);
                 self.p.set_if(ZeroFlag, n == 0);
-
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (ADC, Immediate(m)) => {
+            ADC => {
+                let m = self.memory.fetch(addr);
                 let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
                 let (sum, overflow1) = self.a.overflowing_add(m);
                 let (sum, overflow2) = sum.overflowing_add(c);
@@ -328,10 +227,9 @@ impl<'rom> Cpu<'rom> {
                 self.p.set_if_zn(sum);
 
                 self.a = sum;
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (SBC, Immediate(m)) => {
+            SBC => {
+                let m = self.memory.fetch(addr);
                 let c = if self.p.is_set(CarryFlag) { 0 } else { 1 };
                 let (sub, overflow1) = self.a.overflowing_sub(m);
                 let (sub, overflow2) = sub.overflowing_sub(c);
@@ -344,90 +242,48 @@ impl<'rom> Cpu<'rom> {
                 self.p.set_if_zn(sub);
 
                 self.a = sub;
-                self.pc += 2;
-                self.cycles += 2;
             }
-            (INY, Implied) => {
+            INY => {
                 self.y = self.y.wrapping_add(1);
                 self.p.set_if_zn(self.y);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (DEY, Implied) => {
+            DEY => {
                 self.y = self.y.wrapping_sub(1);
                 self.p.set_if_zn(self.y);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (INX, Implied) => {
+            INX => {
                 self.x = self.x.wrapping_add(1);
                 self.p.set_if_zn(self.x);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (DEX, Implied) => {
+            DEX => {
                 self.x = self.x.wrapping_sub(1);
                 self.p.set_if_zn(self.x);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (TAY, Implied) => {
+            TAY => {
                 self.y = self.a;
                 self.p.set_if_zn(self.y);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (TAX, Implied) => {
+            TAX => {
                 self.x = self.a;
                 self.p.set_if_zn(self.x);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (TYA, Implied) => {
+            TYA => {
                 self.a = self.y;
                 self.p.set_if_zn(self.a);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (TXA, Implied) => {
+            TXA => {
                 self.a = self.x;
                 self.p.set_if_zn(self.a);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (TXS, Implied) => {
+            TXS => {
                 self.sp = self.x;
-
-                self.pc += 1;
-                self.cycles += 2;
             }
-            (TSX, Implied) => {
+            TSX => {
                 self.x = self.sp;
                 self.p.set_if_zn(self.x);
-
-                self.pc += 1;
-                self.cycles += 2;
             }
             _ => panic!("can't execute {:?}", instr),
         }
-    }
-
-    fn branch_if(&mut self, cond: bool, offset: i8) {
-        if cond {
-            self.apply_offset_to_pc(offset);
-            self.cycles += 1;
-        }
-
-        self.pc += 2;
-        self.cycles += 2;
     }
 
     fn fetch(&self) -> Instruction {
@@ -435,58 +291,158 @@ impl<'rom> Cpu<'rom> {
         use self::Label::*;
 
         let op = self.memory.fetch(self.pc);
-        let (label, mode) = match op {
-            0x08 => (PHP, Implied),
-            0x09 => (ORA, self.immediate()),
-            0x10 => (BPL, self.relative()),
-            0x18 => (CLC, Implied),
-            0x20 => (JSR, self.absolute()),
-            0x24 => (BIT, self.zero_page()),
-            0x28 => (PLP, Implied),
-            0x29 => (AND, self.immediate()),
-            0x30 => (BMI, self.relative()),
-            0x35 => (AND, self.zero_page_x()),
-            0x38 => (SEC, Implied),
-            0x40 => (RTI, Implied),
-            0x48 => (PHA, Implied),
-            0x49 => (EOR, self.immediate()),
-            0x4C => (JMP, self.absolute()),
-            0x50 => (BVC, self.relative()),
-            0x60 => (RTS, Implied),
-            0x68 => (PLA, Implied),
-            0x69 => (ADC, self.immediate()),
-            0x70 => (BVS, self.relative()),
-            0x78 => (SEI, Implied),
-            0x85 => (STA, self.zero_page()),
-            0x86 => (STX, self.zero_page()),
-            0x88 => (DEY, Implied),
-            0x8A => (TXA, Implied),
-            0x8E => (STX, self.absolute()),
-            0x90 => (BCC, self.relative()),
-            0x98 => (TYA, Implied),
-            0x9A => (TXS, Implied),
-            0xA0 => (LDY, self.immediate()),
-            0xA2 => (LDX, self.immediate()),
-            0xA8 => (TAY, Implied),
-            0xA9 => (LDA, self.immediate()),
-            0xAA => (TAX, Implied),
-            0xAD => (LDA, self.absolute()),
-            0xAE => (LDX, self.absolute()),
-            0xB0 => (BCS, self.relative()),
-            0xB8 => (CLV, Implied),
-            0xBA => (TSX, Implied),
-            0xC0 => (CPY, self.immediate()),
-            0xC8 => (INY, Implied),
-            0xC9 => (CMP, self.immediate()),
-            0xCA => (DEX, Implied),
-            0xD0 => (BNE, self.relative()),
-            0xD8 => (CLD, Implied),
-            0xE0 => (CPX, self.immediate()),
-            0xE8 => (INX, Implied),
-            0xE9 => (SBC, self.immediate()),
-            0xEA => (NOP, Implied),
-            0xF0 => (BEQ, self.relative()),
-            0xF8 => (SED, Implied),
+        let (label, mode, size, cycles, page_cycles) = match op {
+            0x00 => (BRK, Implied, 1, 7, 0),
+            0x01 => (ORA, IndexedIndirect, 2, 6, 0),
+            0x05 => (ORA, ZeroPage, 2, 3, 0),
+            0x06 => (ASL, ZeroPage, 2, 5, 0),
+            0x08 => (PHP, Implied, 1, 3, 0),
+            0x09 => (ORA, Immediate, 2, 2, 0),
+            0x0A => (ASL, Accumulator, 1, 2, 0),
+            0x0D => (ORA, Absolute, 3, 4, 0),
+            0x0E => (ASL, Absolute, 3, 6, 0),
+            0x10 => (BPL, Relative, 2, 2, 2),
+            0x11 => (ORA, IndirectIndexed, 2, 5, 1),
+            0x15 => (ORA, ZeroPageX, 2, 4, 0),
+            0x16 => (ASL, ZeroPageX, 2, 6, 0),
+            0x18 => (CLC, Implied, 1, 2, 0),
+            0x19 => (ORA, AbsoluteY, 3, 4, 1),
+            0x1D => (ORA, AbsoluteX, 3, 4, 1),
+            0x1E => (ASL, AbsoluteX, 3, 7, 0),
+            0x20 => (JSR, Absolute, 3, 6, 0),
+            0x21 => (AND, IndexedIndirect, 2, 6, 0),
+            0x24 => (BIT, ZeroPage, 2, 3, 0),
+            0x25 => (AND, ZeroPage, 2, 3, 0),
+            0x26 => (ROL, ZeroPage, 2, 5, 0),
+            0x28 => (PLP, Implied, 1, 4, 0),
+            0x29 => (AND, Immediate, 2, 2, 0),
+            0x2A => (ROL, Accumulator, 1, 2, 0),
+            0x2C => (BIT, Absolute, 3, 4, 0),
+            0x2D => (AND, Absolute, 3, 4, 0),
+            0x2E => (ROL, Absolute, 3, 6, 0),
+            0x30 => (BMI, Relative, 2, 2, 2),
+            0x31 => (AND, IndirectIndexed, 2, 5, 1),
+            0x35 => (AND, ZeroPageX, 2, 4, 0),
+            0x36 => (ROL, ZeroPageX, 2, 6, 0),
+            0x38 => (SEC, Implied, 1, 2, 0),
+            0x39 => (AND, AbsoluteY, 3, 4, 1),
+            0x3D => (AND, AbsoluteX, 3, 4, 1),
+            0x3E => (ROL, AbsoluteX, 3, 7, 0),
+            0x40 => (RTI, Implied, 1, 6, 0),
+            0x41 => (EOR, IndexedIndirect, 2, 6, 0),
+            0x45 => (EOR, ZeroPage, 2, 3, 0),
+            0x46 => (LSR, ZeroPage, 2, 5, 0),
+            0x48 => (PHA, Implied, 1, 3, 0),
+            0x49 => (EOR, Immediate, 2, 2, 0),
+            0x4A => (LSR, Accumulator, 1, 2, 0),
+            0x4C => (JMP, Absolute, 3, 3, 0),
+            0x4D => (EOR, Absolute, 3, 4, 0),
+            0x4E => (LSR, Absolute, 3, 6, 0),
+            0x50 => (BVC, Relative, 2, 2, 2),
+            0x51 => (EOR, IndirectIndexed, 2, 5, 1),
+            0x55 => (EOR, ZeroPageX, 2, 4, 0),
+            0x56 => (LSR, ZeroPageX, 2, 6, 0),
+            0x58 => (CLI, Implied, 1, 2, 0),
+            0x59 => (EOR, AbsoluteY, 3, 4, 1),
+            0x5D => (EOR, AbsoluteX, 3, 4, 1),
+            0x5E => (LSR, AbsoluteX, 3, 7, 0),
+            0x60 => (RTS, Implied, 1, 6, 0),
+            0x61 => (ADC, IndexedIndirect, 2, 6, 0),
+            0x65 => (ADC, ZeroPage, 2, 3, 0),
+            0x66 => (ROR, ZeroPage, 2, 5, 0),
+            0x68 => (PLA, Implied, 1, 4, 0),
+            0x69 => (ADC, Immediate, 2, 2, 0),
+            0x6A => (ROR, Accumulator, 1, 2, 0),
+            0x6C => (JMP, Indirect, 3, 5, 0),
+            0x6D => (ADC, Absolute, 3, 4, 0),
+            0x6E => (ROR, Absolute, 3, 6, 0),
+            0x70 => (BVS, Relative, 2, 2, 2),
+            0x71 => (ADC, IndirectIndexed, 2, 5, 1),
+            0x75 => (ADC, ZeroPageX, 2, 4, 0),
+            0x76 => (ROR, ZeroPageX, 2, 6, 0),
+            0x78 => (SEI, Implied, 1, 2, 0),
+            0x79 => (ADC, AbsoluteY, 3, 4, 1),
+            0x7D => (ADC, AbsoluteX, 3, 4, 1),
+            0x7E => (ROR, AbsoluteX, 3, 7, 0),
+            0x81 => (STA, IndexedIndirect, 2, 6, 0),
+            0x84 => (STY, ZeroPage, 2, 3, 0),
+            0x85 => (STA, ZeroPage, 2, 3, 0),
+            0x86 => (STX, ZeroPage, 2, 3, 0),
+            0x88 => (DEY, Implied, 1, 2, 0),
+            0x8A => (TXA, Implied, 1, 2, 0),
+            0x8C => (STY, Absolute, 3, 4, 0),
+            0x8D => (STA, Absolute, 3, 4, 0),
+            0x8E => (STX, Absolute, 3, 4, 0),
+            0x90 => (BCC, Relative, 2, 2, 2),
+            0x91 => (STA, IndirectIndexed, 2, 6, 0),
+            0x94 => (STY, ZeroPageY, 2, 4, 0),
+            0x95 => (STA, ZeroPageX, 2, 4, 0),
+            0x96 => (STX, ZeroPageY, 2, 4, 0),
+            0x98 => (TYA, Implied, 1, 2, 0),
+            0x99 => (STA, AbsoluteY, 3, 5, 0),
+            0x9A => (TXS, Implied, 1, 2, 0),
+            0x9D => (STA, AbsoluteX, 3, 5, 0),
+            0xA0 => (LDY, Immediate, 2, 2, 0),
+            0xA1 => (LDA, IndexedIndirect, 2, 6, 0),
+            0xA2 => (LDX, Immediate, 2, 2, 0),
+            0xA4 => (LDY, ZeroPage, 2, 3, 0),
+            0xA5 => (LDA, ZeroPage, 2, 3, 0),
+            0xA6 => (LDX, ZeroPage, 2, 3, 0),
+            0xA8 => (TAY, Implied, 1, 2, 0),
+            0xA9 => (LDA, Immediate, 2, 2, 0),
+            0xAA => (TAX, Implied, 1, 2, 0),
+            0xAC => (LDY, Absolute, 3, 4, 0),
+            0xAD => (LDA, Absolute, 3, 4, 0),
+            0xAE => (LDX, Absolute, 3, 4, 0),
+            0xB0 => (BCS, Relative, 2, 2, 2),
+            0xB1 => (LDA, IndirectIndexed, 2, 5, 1),
+            0xB4 => (LDY, ZeroPageX, 2, 4, 0),
+            0xB5 => (LDA, ZeroPageX, 2, 4, 0),
+            0xB6 => (LDX, ZeroPageY, 2, 4, 0),
+            0xB8 => (CLV, Implied, 1, 2, 0),
+            0xB9 => (LDA, AbsoluteY, 3, 4, 1),
+            0xBA => (TSX, Implied, 1, 2, 0),
+            0xBC => (LDY, AbsoluteX, 3, 4, 1),
+            0xBD => (LDA, AbsoluteX, 3, 4, 1),
+            0xBE => (LDX, AbsoluteY, 3, 4, 1),
+            0xC0 => (CPY, Immediate, 2, 2, 0),
+            0xC1 => (CMP, IndexedIndirect, 2, 6, 0),
+            0xC4 => (CPY, ZeroPage, 2, 3, 0),
+            0xC5 => (CMP, ZeroPage, 2, 3, 0),
+            0xC6 => (DEC, ZeroPage, 2, 5, 0),
+            0xC8 => (INY, Implied, 1, 2, 0),
+            0xC9 => (CMP, Immediate, 2, 2, 0),
+            0xCA => (DEX, Implied, 1, 2, 0),
+            0xCC => (CPY, Absolute, 3, 4, 0),
+            0xCD => (CMP, Absolute, 3, 4, 0),
+            0xCE => (DEC, Absolute, 3, 6, 0),
+            0xD0 => (BNE, Relative, 2, 2, 2),
+            0xD1 => (CMP, IndirectIndexed, 2, 5, 1),
+            0xD5 => (CMP, ZeroPageX, 2, 4, 0),
+            0xD6 => (DEC, ZeroPageX, 2, 6, 0),
+            0xD8 => (CLD, Implied, 1, 2, 0),
+            0xD9 => (CMP, AbsoluteY, 3, 4, 1),
+            0xDD => (CMP, AbsoluteX, 3, 4, 1),
+            0xDE => (DEC, AbsoluteX, 3, 7, 0),
+            0xE0 => (CPX, Immediate, 2, 2, 0),
+            0xE1 => (SBC, IndexedIndirect, 2, 6, 0),
+            0xE4 => (CPX, ZeroPage, 2, 3, 0),
+            0xE5 => (SBC, ZeroPage, 2, 3, 0),
+            0xE6 => (INC, ZeroPage, 2, 5, 0),
+            0xE8 => (INX, Implied, 1, 2, 0),
+            0xE9 => (SBC, Immediate, 2, 2, 0),
+            0xEA => (NOP, Implied, 1, 2, 0),
+            0xEC => (CPX, Absolute, 3, 4, 0),
+            0xED => (SBC, Absolute, 3, 4, 0),
+            0xEE => (INC, Absolute, 3, 6, 0),
+            0xF0 => (BEQ, Relative, 2, 2, 2),
+            0xF1 => (SBC, IndirectIndexed, 2, 5, 1),
+            0xF5 => (SBC, ZeroPageX, 2, 4, 0),
+            0xF6 => (INC, ZeroPageX, 2, 6, 0),
+            0xF8 => (SED, Implied, 1, 2, 0),
+            0xF9 => (SBC, AbsoluteY, 3, 4, 1),
+            0xFD => (SBC, AbsoluteX, 3, 4, 1),
+            0xFE => (INC, AbsoluteX, 3, 7, 0),
             op => panic!("unknown opcode 0x{:X} at addr {:04X}", op, self.pc),
         };
 
@@ -494,6 +450,37 @@ impl<'rom> Cpu<'rom> {
             mode: mode,
             label: label,
             op: op,
+            addr: self.addr_from_mode(mode),
+            size: size,
+            cycles: cycles,
+            page_cycles: page_cycles,
+        }
+    }
+
+    fn addr_from_mode(&self, mode: AddressingMode) -> u16 {
+        use self::AddressingMode::*;
+
+        match mode {
+            Implied | Accumulator => 0,
+            Immediate => self.pc + 1,
+            ZeroPage => self.memory.fetch(self.pc + 1) as u16,
+            ZeroPageX => (self.memory.fetch(self.pc + 1) + self.x) as u16,
+            ZeroPageY => (self.memory.fetch(self.pc + 1) + self.y) as u16,
+            Relative => {
+                let offset = self.memory.fetch(self.pc + 1) as i8;
+
+                if offset < 0 {
+                    self.pc + 2 - offset as u16
+                } else {
+                    self.pc + 2 + offset as u16
+                }
+            }
+            Absolute => self.memory.fetch_double(self.pc + 1),
+            AbsoluteX => self.memory.fetch_double(self.pc + 1) + self.x as u16,
+            AbsoluteY => self.memory.fetch_double(self.pc + 1) + self.y as u16,
+            Indirect => unimplemented!(),
+            IndexedIndirect => unimplemented!(),
+            IndirectIndexed => unimplemented!(),
         }
     }
 
@@ -526,34 +513,6 @@ impl<'rom> Cpu<'rom> {
         self.p = self.pop().into();
         self.p.unset(Status::BreakCommand);
         self.p.set(Status::UnusedFlag);
-    }
-
-    fn apply_offset_to_pc(&mut self, offset: i8) {
-        self.pc = if offset < 0 {
-            self.pc - offset as u16
-        } else {
-            self.pc + offset as u16
-        };
-    }
-
-    fn absolute(&self) -> AddressingMode {
-        AddressingMode::Absolute(self.memory.fetch_double(self.pc + 1))
-    }
-
-    fn zero_page(&self) -> AddressingMode {
-        AddressingMode::ZeroPage(self.memory.fetch(self.pc + 1))
-    }
-
-    fn zero_page_x(&self) -> AddressingMode {
-        AddressingMode::ZeroPageX(self.memory.fetch(self.pc + 1) + self.x)
-    }
-
-    fn relative(&self) -> AddressingMode {
-        AddressingMode::Relative(self.memory.fetch(self.pc + 1) as i8)
-    }
-
-    fn immediate(&self) -> AddressingMode {
-        AddressingMode::Immediate(self.memory.fetch(self.pc + 1))
     }
 }
 
@@ -652,7 +611,7 @@ impl<'a, 'b> fmt::Display for CpuState<'a, 'b> {
                "{pc:04X}  {bytecode:9} {instr:31} A:{a:02X} X:{x:02X} \
                 Y:{y:02X} P:{p:02X} SP:{sp:2X} CYC:{cyc:3?}",
                pc = self.pc,
-               bytecode = self.instr.bytecode(),
+               bytecode = self.instr.bytecode(&self),
                instr = self.instr.to_string(&self),
                a = self.a,
                x = self.x,
@@ -719,17 +678,17 @@ impl<'rom> Memory<'rom> {
 pub enum AddressingMode {
     Implied,
     Accumulator,
-    Immediate(u8),
-    ZeroPage(u8),
-    ZeroPageX(u8),
-    ZeroPageY(u8),
-    Relative(i8),
-    Absolute(u16),
-    AbsoluteX(u16),
-    AbsoluteY(u16),
-    Indirect(u16),
-    IndexedIndirect(u8),
-    IndirectIndexed(u8),
+    Immediate,
+    ZeroPage,
+    ZeroPageX,
+    ZeroPageY,
+    Relative,
+    Absolute,
+    AbsoluteX,
+    AbsoluteY,
+    Indirect,
+    IndexedIndirect,
+    IndirectIndexed,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -737,17 +696,21 @@ pub struct Instruction {
     mode: AddressingMode,
     label: Label,
     op: u8,
+    addr: u16,
+    size: u8,
+    cycles: u8,
+    page_cycles: u8,
 }
 
 impl Instruction {
-    pub fn bytecode(&self) -> String {
+    pub fn bytecode(&self, s: &CpuState) -> String {
         use self::AddressingMode::*;
 
         let args = match self.mode {
-            Absolute(addr) => format!("{:02X} {:02X}", addr as u8, addr >> 8),
-            Immediate(val) | ZeroPage(val) => format!("{:02X}", val),
-            Relative(val) => format!("{:02X}", val as u8),
-            _ => "".into(),
+            Absolute => format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8),
+            Immediate => format!("{:02X}", s.mem.fetch(self.addr)),
+            Implied | Accumulator => "".into(),
+            _ => format!("{:02X}", self.addr as u8),
         };
 
         format!("{:02X} {:6}", self.op, args)
@@ -758,24 +721,18 @@ impl Instruction {
         use self::Label::*;
 
         let args = match (self.label, self.mode) {
-            (STX, Absolute(addr)) |
-            (LDX, Absolute(addr)) |
-            (LDA, Absolute(addr)) => {
-                format!("${:04X} = {:02X}", addr, s.mem.fetch(addr))
+            (STX, Absolute) |
+            (LDX, Absolute) |
+            (LDA, Absolute) => {
+                format!("${:04X} = {:02X}", self.addr, s.mem.fetch(self.addr))
             }
-            (_, Absolute(addr)) => format!("${:04X}", addr),
-            (_, Immediate(val)) => format!("#${:02X}", val),
-            (_, ZeroPage(addr)) => {
-                format!("${:02X} = {:02X}", addr, s.mem.fetch(addr as u16))
+            (_, Absolute) => format!("${:04X}", self.addr),
+            (_, Immediate) => format!("#${:02X}", s.mem.fetch(self.addr)),
+            (_, ZeroPage) => {
+                format!("${:02X} = {:02X}", self.addr, s.mem.fetch(self.addr))
             }
-            (_, Relative(offset)) => {
-                let addr = if offset < 0 {
-                    s.pc - offset as u16
-                } else {
-                    s.pc + offset as u16
-                };
-
-                format!("${:04X}", addr + 2)
+            (_, Relative) => {
+                format!("${:04X}", self.addr)
             }
             _ => "".into(),
         };
