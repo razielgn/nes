@@ -1,6 +1,5 @@
 use nom::le_u8;
 
-#[derive(Debug, PartialEq)]
 pub struct Rom<'rom> {
     pub flags_6: u8, // TODO
     pub flags_7: u8, // TODO
@@ -9,6 +8,8 @@ pub struct Rom<'rom> {
     pub flags_10: u8, // TODO
     pub prg: &'rom [u8],
     pub chr: &'rom [u8],
+    pub mapper: u8,
+    pub sram: [u8; 0x2000],
 }
 
 impl<'rom> Rom<'rom> {
@@ -25,14 +26,21 @@ impl<'rom> Rom<'rom> {
         prg: take!(16_384 * size_prg_rom as usize) >>
         chr: take!(8_192 * size_chr_rom as usize) >>
         eof!() >>
-        (Rom {
-            flags_6: flags_6,
-            flags_7: flags_7,
-            size_prg_ram: if size_prg_ram == 0 { 1 } else { size_prg_ram },
-            flags_9: flags_7,
-            flags_10: flags_10,
-            prg: prg,
-            chr: chr,
+        ({
+            let lo_mapper = flags_6 & 0x0F;
+            let hi_mapper = flags_7 & 0x78;
+
+            Rom {
+                flags_6: flags_6,
+                flags_7: flags_7,
+                size_prg_ram: if size_prg_ram == 0 { 1 } else { size_prg_ram },
+                flags_9: flags_7,
+                flags_10: flags_10,
+                prg: prg,
+                chr: chr,
+                mapper: lo_mapper | hi_mapper,
+                sram: [0; 0x2000],
+            }
         })
     ));
 }
@@ -57,6 +65,8 @@ mod test {
         assert_eq!(1, rom.size_prg_ram);
         assert_eq!(0, rom.flags_9);
         assert_eq!(0, rom.flags_10);
+
+        assert_eq!(0, rom.mapper);
 
         assert_eq!(16_384, rom.prg.len());
         assert_eq!(&b"\x4c\xf5\xc5\x60\x78\xd8\xa2\xff"[..], &rom.prg[0..8]);
