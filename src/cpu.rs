@@ -1,6 +1,9 @@
+use instruction::AddressingMode;
+use instruction::AddressingMode::*;
+use instruction::Instruction;
+use instruction::Label::*;
+use memory::Memory;
 use rom::Rom;
-use self::AddressingMode::*;
-use self::Label::*;
 use self::Status::*;
 use std::fmt;
 
@@ -12,18 +15,6 @@ pub struct Cpu<'rom> {
     a: u8,
     x: u8,
     y: u8,
-
-    /// 0x100   => Zero Page
-    /// 0x200   => Stack
-    /// 0x800   => RAM
-    /// 0x2000  => Mirrors (0-0x7FF)
-    /// 0x2008  => I/O Registers
-    /// 0x4000  => Mirrors (0x2000-0x2007)
-    /// 0x4020  => I/O Registers
-    /// 0x6000  => Expansion ROM
-    /// 0x8000  => SRAM
-    /// 0xC000  => PRG-ROM (Lower Bank)
-    /// 0x10000 => PRG-ROM (Upper Bank)
     memory: Memory<'rom>,
 }
 
@@ -451,7 +442,9 @@ impl<'rom> Cpu<'rom> {
             0x17 => (SLO, ZeroPageX, 2, 6, 0),
             0x18 => (CLC, Implied, 1, 2, 0),
             0x19 => (ORA, AbsoluteY, 3, 4, 1),
-            0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA | 0xEA => (NOP, Implied, 1, 2, 0),
+            0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA | 0xEA => {
+                (NOP, Implied, 1, 2, 0)
+            }
             0x1B => (SLO, AbsoluteY, 3, 6, 1),
             0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => (NOP, AbsoluteX, 3, 4, 1),
             0x1D => (ORA, AbsoluteX, 3, 4, 1),
@@ -758,7 +751,7 @@ enum Status {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-struct P(u8);
+pub struct P(u8);
 
 impl P {
     fn new() -> Self {
@@ -821,17 +814,16 @@ impl fmt::UpperHex for P {
     }
 }
 
-//#[derive(Debug, PartialEq)]
 pub struct CpuState<'mem, 'rom: 'mem> {
-    pc: u16,
-    a: u8,
-    x: u8,
-    y: u8,
-    p: P,
-    sp: u8,
-    cycles: usize,
-    instr: Instruction,
-    mem: &'mem Memory<'rom>,
+    pub pc: u16,
+    pub a: u8,
+    pub x: u8,
+    pub y: u8,
+    pub p: P,
+    pub sp: u8,
+    pub cycles: usize,
+    pub instr: Instruction,
+    pub mem: &'mem Memory<'rom>,
 }
 
 impl<'a, 'b> fmt::Display for CpuState<'a, 'b> {
@@ -849,291 +841,6 @@ impl<'a, 'b> fmt::Display for CpuState<'a, 'b> {
                sp = self.sp,
                cyc = (self.cycles * 3) % 341)
     }
-}
-
-struct Memory<'rom> {
-    ram: [u8; 0x2000],
-    rom: Rom<'rom>,
-}
-
-impl<'rom> Memory<'rom> {
-    pub fn new(rom: Rom<'rom>) -> Self {
-        Memory {
-            ram: [0; 0x2000],
-            rom: rom,
-        }
-    }
-
-    pub fn fetch<A>(&self, addr: A) -> u8
-        where A: Into<u16>
-    {
-        let addr = addr.into() as usize;
-
-        let prg_banks = self.rom.prg.len() / 0x4000;
-        let prg_bank2 = (prg_banks - 1) * 0x4000;
-
-        match addr {
-            0x0000...0x1FFF => self.ram[addr],
-            0x2000...0x3FFF => panic!("PPU register"),
-            0x4000...0x401F => panic!("I/O registers"),
-            0x4020...0x5FFF => self.rom.chr[addr - 0x4020],
-            0x6000...0x7FFF => self.rom.sram[addr - 0x6000],
-            0x8000...0xBFFF => self.rom.prg[addr - 0x8000],
-            0xC000...0xFFFF => self.rom.prg[prg_bank2 + (addr - 0xC000)],
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn fetch_double(&self, addr: u16) -> u16 {
-        let lo = self.fetch(addr) as u16;
-        let hi = self.fetch(addr + 1) as u16;
-        hi << 8 | lo
-    }
-
-    pub fn fetch_double_bug(&self, addr: u16) -> u16 {
-        let lo = self.fetch(addr) as u16;
-        let hi =
-            self.fetch((addr & 0xff00) |
-                       ((addr as u8).wrapping_add(1)) as u16) as u16;
-        hi << 8 | lo
-    }
-
-    pub fn store<A, V>(&mut self, addr: A, val: V)
-        where A: Into<u16>,
-              V: Into<u8>
-    {
-        let addr = addr.into() as usize;
-        let val = val.into();
-
-        if addr < 0x2000 {
-            self.ram[addr] = val;
-        } else {
-            panic!("cannot write outside handled memory");
-        }
-    }
-}
-
-//#[derive(Debug, PartialEq)]
-//#pub enum Interrupt {
-//#IrqBrk,
-//#Nmi,
-//#Reset,
-//
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(dead_code)]
-pub enum AddressingMode {
-    Implied,
-    Accumulator,
-    Immediate,
-    ZeroPage,
-    ZeroPageX,
-    ZeroPageY,
-    Relative,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    Indirect,
-    IndexedIndirect,
-    IndirectIndexed,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Instruction {
-    mode: AddressingMode,
-    label: Label,
-    op: u8,
-    addr: u16,
-    size: u8,
-    cycles: u8,
-}
-
-impl Instruction {
-    pub fn bytecode(&self, s: &CpuState) -> String {
-        let args = match self.mode {
-            Absolute => {
-                format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8)
-            }
-            Indirect | AbsoluteX | AbsoluteY => {
-                let param = s.mem.fetch_double(s.pc + 1);
-                format!("{:02X} {:02X}", param as u8, param >> 8 as u8)
-            }
-            ZeroPageX | ZeroPageY => {
-                let param = s.mem.fetch(s.pc + 1);
-                format!("{:02X}", param)
-            }
-            Immediate => format!("{:02X}", s.mem.fetch(self.addr)),
-            Implied | Accumulator => "".into(),
-            Relative => {
-                format!("{:02X}",
-                        self.addr.wrapping_sub(s.pc).wrapping_sub(2) as u8)
-            }
-            IndexedIndirect | IndirectIndexed => {
-                let param = s.mem.fetch(s.pc + 1);
-                format!("{:02X}", param)
-            }
-            _ => format!("{:02X}", self.addr as u8),
-        };
-
-        format!("{:02X} {:6}", self.op, args)
-    }
-
-    pub fn to_string(&self, s: &CpuState) -> String {
-        let args = match self.mode {
-            Absolute => {
-                match self.label {
-                    JMP | JSR => format!("${:04X}", self.addr),
-                    _ => {
-                        format!("${:04X} = {:02X}",
-                                self.addr,
-                                s.mem.fetch(self.addr))
-                    }
-                }
-            }
-            AbsoluteX => {
-                let param = s.mem.fetch_double(s.pc + 1);
-                format!("${:04X},X @ {:04X} = {:02X}",
-                        param,
-                        self.addr,
-                        s.mem.fetch(self.addr))
-            }
-            AbsoluteY => {
-                let param = s.mem.fetch_double(s.pc + 1);
-                format!("${:04X},Y @ {:04X} = {:02X}",
-                        param,
-                        self.addr,
-                        s.mem.fetch(self.addr))
-            }
-            Immediate => format!("#${:02X}", s.mem.fetch(self.addr)),
-            ZeroPage => {
-                format!("${:02X} = {:02X}", self.addr, s.mem.fetch(self.addr))
-            }
-            ZeroPageX => {
-                let addr = s.mem.fetch(s.pc + 1);
-                format!("${:02X},X @ {:02X} = {:02X}",
-                        addr,
-                        addr.wrapping_add(s.x),
-                        s.mem.fetch(self.addr))
-            }
-            ZeroPageY => {
-                let addr = s.mem.fetch(s.pc + 1);
-                format!("${:02X},Y @ {:02X} = {:02X}",
-                        addr,
-                        addr.wrapping_add(s.y),
-                        s.mem.fetch(self.addr))
-            }
-            Relative => format!("${:04X}", self.addr),
-            Accumulator => "A".into(),
-            Indirect => {
-                let param = s.mem.fetch_double(s.pc + 1);
-                let value = s.mem.fetch_double_bug(param);
-                format!("(${:04X}) = {:04X}", param, value)
-            }
-            IndexedIndirect => {
-                let param = s.mem.fetch(s.pc + 1);
-                let indir = param.wrapping_add(s.x);
-                let val = s.mem.fetch_double_bug(self.addr);
-                format!("(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                        param,
-                        indir,
-                        self.addr,
-                        val)
-            }
-            IndirectIndexed => {
-                let param = s.mem.fetch(s.pc + 1);
-                let indir = s.mem.fetch_double_bug(param as u16);
-                let val = s.mem.fetch(indir.wrapping_add(s.y as u16));
-                format!("(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                        param,
-                        indir,
-                        self.addr,
-                        val)
-            }
-            _ => "".into(),
-        };
-
-        format!("{:?} {}", self.label, args)
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(dead_code, non_snake_case)]
-pub enum Label {
-    ADC,
-    AHX,
-    ALR,
-    ANC,
-    AND,
-    ARR,
-    ASL,
-    AXS,
-    BCC,
-    BCS,
-    BEQ,
-    BIT,
-    BMI,
-    BNE,
-    BPL,
-    BRK,
-    BVC,
-    BVS,
-    CLC,
-    CLD,
-    CLI,
-    CLV,
-    CMP,
-    CPX,
-    CPY,
-    DCP,
-    DEC,
-    DEX,
-    DEY,
-    EOR,
-    INC,
-    INX,
-    INY,
-    ISB,
-    JMP,
-    JSR,
-    KIL,
-    LAS,
-    LAX,
-    LDA,
-    LDX,
-    LDY,
-    LSR,
-    NOP,
-    ORA,
-    PHA,
-    PHP,
-    PLA,
-    PLP,
-    RLA,
-    ROL,
-    ROR,
-    RRA,
-    RTI,
-    RTS,
-    SAX,
-    SBC,
-    SEC,
-    SED,
-    SEI,
-    SHX,
-    SHY,
-    SLO,
-    SRE,
-    STA,
-    STX,
-    STY,
-    TAS,
-    TAX,
-    TAY,
-    TSX,
-    TXA,
-    TXS,
-    TYA,
-    XAA,
 }
 
 #[cfg(test)]

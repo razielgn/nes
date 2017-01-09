@@ -2,7 +2,9 @@
 extern crate nom;
 
 mod cpu;
+mod memory;
 mod rom;
+mod instruction;
 
 use cpu::Cpu;
 use rom::Rom;
