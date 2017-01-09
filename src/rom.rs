@@ -13,6 +13,21 @@ pub struct Rom<'rom> {
 }
 
 impl<'rom> Rom<'rom> {
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        Rom {
+            flags_6: 0,
+            flags_7: 0,
+            size_prg_ram: 0,
+            flags_9: 0,
+            flags_10: 0,
+            prg: &[],
+            chr: &[],
+            mapper: 0,
+            sram: [0; 0x2000],
+        }
+    }
+
     named!(pub parse<Rom>, do_parse!(
         tag!("NES\x1A") >>
         size_prg_rom: le_u8 >>
