@@ -9,7 +9,7 @@ use std::fmt;
 
 pub struct Cpu<'rom> {
     cycles: usize,
-    pc: u16,
+    pub pc: u16,
     sp: u8,
     p: P,
     a: u8,
@@ -20,15 +20,17 @@ pub struct Cpu<'rom> {
 
 impl<'rom> Cpu<'rom> {
     pub fn new(rom: Rom<'rom>) -> Self {
+        let memory = Memory::new(rom);
+
         Cpu {
             cycles: 0,
-            pc: 0xc000,
-            sp: 0xfd,
+            pc: memory.fetch_double(0xFFFC),
+            sp: 0xFD,
             p: P::new(),
             a: 0,
             x: 0,
             y: 0,
-            memory: Memory::new(rom),
+            memory: memory,
         }
     }
 
@@ -704,7 +706,7 @@ impl<'rom> Cpu<'rom> {
 
     fn push(&mut self, val: u8) {
         self.memory.store(0x100 + self.sp as u16, val);
-        self.sp -= 1;
+        self.sp = self.sp.wrapping_sub(1);
     }
 
     fn push_double(&mut self, val: u16) {
@@ -716,7 +718,7 @@ impl<'rom> Cpu<'rom> {
     }
 
     fn pop(&mut self) -> u8 {
-        self.sp += 1;
+        self.sp = self.sp.wrapping_add(1);
         self.memory.fetch(0x100 + self.sp as u16)
     }
 
@@ -869,6 +871,7 @@ mod test {
         };
 
         let mut cpu = Cpu::new(rom);
+        cpu.pc = 0xC000;
 
         println!("");
         for expected_state in expected_states {
