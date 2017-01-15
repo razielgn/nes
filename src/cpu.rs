@@ -7,19 +7,21 @@ use rom::Rom;
 use self::Status::*;
 use std::fmt;
 
-pub struct Cpu<'rom> {
+const BRK_VECTOR: u16 = 0xFFFE;
+
+pub struct Cpu {
     cycles: usize,
-    pub pc: u16,
+    pc: u16,
     sp: u8,
     p: P,
     a: u8,
     x: u8,
     y: u8,
-    memory: Memory<'rom>,
+    memory: Memory,
 }
 
-impl<'rom> Cpu<'rom> {
-    pub fn new(rom: Rom<'rom>) -> Self {
+impl Cpu {
+    pub fn new(rom: Rom) -> Self {
         let memory = Memory::new(rom);
 
         Cpu {
@@ -48,6 +50,10 @@ impl<'rom> Cpu<'rom> {
         }
     }
 
+    pub fn jump(&mut self, addr: u16) {
+        self.pc = addr;
+    }
+
     pub fn step(&mut self) {
         let instr = self.fetch();
         let addr = instr.addr;
@@ -55,27 +61,30 @@ impl<'rom> Cpu<'rom> {
         self.pc += instr.size as u16;
         self.cycles += instr.cycles as usize;
 
+        if instr.page_crossed {
+            self.cycles += instr.page_cycles as usize;
+        }
+
         match instr.label {
             JMP => {
-                self.pc = addr;
+                self.jump(addr);
             }
             JSR => {
                 let pc = self.pc;
                 self.push_double(pc - 1);
-                self.pc = addr;
+                self.jump(addr);
             }
             RTS => {
-                self.pc = self.pop_double() + 1;
+                let addr = self.pop_double() + 1;
+                self.jump(addr);
             }
             RTI => {
                 self.pop_p();
-                self.pc = self.pop_double();
+
+                let addr = self.pop_double();
+                self.jump(addr);
             }
-            PHP => {
-                let mut p = self.p;
-                p.set(BreakCommand);
-                self.push(p.into());
-            }
+            PHP => self.php(),
             PHA => {
                 let a = self.a;
                 self.push(a);
@@ -120,9 +129,7 @@ impl<'rom> Cpu<'rom> {
             SEC => {
                 self.p.set(CarryFlag);
             }
-            SEI => {
-                self.p.set(InterruptDisable);
-            }
+            SEI => self.sei(),
             SED => {
                 self.p.set(DecimalMode);
             }
@@ -138,49 +145,49 @@ impl<'rom> Cpu<'rom> {
             BCS => {
                 if self.p.is_set(CarryFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BCC => {
                 if !self.p.is_set(CarryFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BEQ => {
                 if self.p.is_set(ZeroFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BNE => {
                 if !self.p.is_set(ZeroFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BVS => {
                 if self.p.is_set(OverflowFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BVC => {
                 if !self.p.is_set(OverflowFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BMI => {
                 if self.p.is_set(NegativeFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BPL => {
                 if !self.p.is_set(NegativeFlag) {
                     self.add_branching_cycles(addr);
-                    self.pc = addr;
+                    self.jump(addr);
                 }
             }
             BIT => {
@@ -199,15 +206,13 @@ impl<'rom> Cpu<'rom> {
                 let m = self.memory.fetch(addr);
                 let n = self.y.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.y >= m);
-                self.p.set_if(NegativeFlag, (n as i8) < 0);
-                self.p.set_if(ZeroFlag, n == 0);
+                self.p.set_if_zn(n);
             }
             CPX => {
                 let m = self.memory.fetch(addr);
                 let n = self.x.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.x >= m);
-                self.p.set_if(NegativeFlag, (n as i8) < 0);
-                self.p.set_if(ZeroFlag, n == 0);
+                self.p.set_if_zn(n);
             }
             ADC => self.adc(instr),
             SBC => self.sbc(instr),
@@ -223,10 +228,7 @@ impl<'rom> Cpu<'rom> {
                 self.x = self.x.wrapping_add(1);
                 self.p.set_if_zn(self.x);
             }
-            DEX => {
-                self.x = self.x.wrapping_sub(1);
-                self.p.set_if_zn(self.x);
-            }
+            DEX => self.dex(),
             TAY => {
                 self.y = self.a;
                 self.p.set_if_zn(self.y);
@@ -280,8 +282,79 @@ impl<'rom> Cpu<'rom> {
                 self.lsr(instr);
                 self.eor(instr);
             }
+            CLI => {
+                self.p.unset(InterruptDisable);
+            }
+            ANC => {
+                self.and(instr);
+                self.p.copy(NegativeFlag, CarryFlag);
+            }
+            ALR => {
+                self.a &= self.memory.fetch(instr.addr);
+                self.p.set_if(CarryFlag, self.a & 0x01 == 1);
+
+                self.a >>= 1;
+                self.p.set_if_zero(self.a);
+                self.p.unset(NegativeFlag);
+            }
+            ARR => {
+                self.and(instr);
+                self.ror_acc();
+
+                let c = (self.a >> 6) & 1;
+                self.p.set_if(CarryFlag, c == 1);
+                self.p.set_if(OverflowFlag, (c ^ (self.a >> 5) & 1) == 1);
+            }
+            AXS => {
+                let m = self.memory.fetch(instr.addr);
+                let n = (self.a & self.x).wrapping_sub(m);
+
+                self.p.set_if(CarryFlag, (self.a & self.x) >= m);
+                self.p.set_if(NegativeFlag, (n as i8) < 0);
+                self.p.set_if_zero(n);
+                self.x = n;
+            }
+            SHY => {
+                let (x, y) = (self.x, self.y);
+                self.strange_address_write(instr, y, x);
+            }
+            SHX => {
+                let (x, y) = (self.x, self.y);
+                self.strange_address_write(instr, x, y);
+            }
+            BRK => {
+                let pc = self.pc + 1;
+                self.push_double(pc);
+                self.php();
+                self.sei();
+
+                let addr = self.memory.fetch_double(BRK_VECTOR);
+                self.jump(addr);
+            }
             _ => panic!("can't execute {:?}", instr),
         }
+    }
+
+    fn php(&mut self) {
+        let mut p = self.p;
+        p.set(BreakCommand);
+
+        self.push(p.into());
+    }
+
+    fn sei(&mut self) {
+        self.p.set(InterruptDisable);
+    }
+
+    fn strange_address_write(&mut self, instr: Instruction, val: u8, idx: u8) {
+        let addr = if instr.page_crossed {
+            instr.addr & ((val as u16) << 8) | (instr.addr & 0x00FF)
+        } else {
+            instr.addr
+        };
+
+        let orig_addr = instr.addr.wrapping_sub(idx as u16);
+        self.memory.store(addr, val & ((orig_addr >> 8) as u8 + 1));
     }
 
     fn inc(&mut self, i: Instruction) {
@@ -296,13 +369,18 @@ impl<'rom> Cpu<'rom> {
         self.memory.store(i.addr, m);
     }
 
+    fn dex(&mut self) {
+        self.x = self.x.wrapping_sub(1);
+        self.p.set_if_zn(self.x);
+    }
+
     fn cmp(&mut self, i: Instruction) {
         let m = self.memory.fetch(i.addr);
         let n = self.a.wrapping_sub(m);
 
         self.p.set_if(CarryFlag, self.a >= m);
         self.p.set_if(NegativeFlag, (n as i8) < 0);
-        self.p.set_if(ZeroFlag, n == 0);
+        self.p.set_if_zero(n);
     }
 
     fn sbc(&mut self, i: Instruction) {
@@ -335,19 +413,23 @@ impl<'rom> Cpu<'rom> {
     }
 
     fn ror(&mut self, i: Instruction) {
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
-
         if i.mode == Accumulator {
-            self.p.set_if(CarryFlag, self.a & 1 == 1);
-            self.a = (self.a >> 1) | (c << 7);
-            self.p.set_if_zn(self.a);
+            self.ror_acc();
         } else {
+            let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
             let mut m = self.memory.fetch(i.addr);
             self.p.set_if(CarryFlag, m & 1 == 1);
             m = (m >> 1) | (c << 7);
             self.p.set_if_zn(m);
             self.memory.store(i.addr, m);
         }
+    }
+
+    fn ror_acc(&mut self) {
+        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        self.p.set_if(CarryFlag, self.a & 1 == 1);
+        self.a = (self.a >> 1) | (c << 7);
+        self.p.set_if_zn(self.a);
     }
 
     fn rol(&mut self, i: Instruction) {
@@ -431,6 +513,7 @@ impl<'rom> Cpu<'rom> {
             0x08 => (PHP, Implied, 1, 3, 0),
             0x09 => (ORA, Immediate, 2, 2, 0),
             0x0A => (ASL, Accumulator, 1, 2, 0),
+            0x0B | 0x2B => (ANC, Immediate, 2, 2, 0),
             0x0C => (NOP, Absolute, 3, 4, 0),
             0x0D => (ORA, Absolute, 3, 4, 0),
             0x0E => (ASL, Absolute, 3, 6, 0),
@@ -487,6 +570,7 @@ impl<'rom> Cpu<'rom> {
             0x48 => (PHA, Implied, 1, 3, 0),
             0x49 => (EOR, Immediate, 2, 2, 0),
             0x4A => (LSR, Accumulator, 1, 2, 0),
+            0x4B => (ALR, Immediate, 2, 2, 0),
             0x4C => (JMP, Absolute, 3, 3, 0),
             0x4D => (EOR, Absolute, 3, 4, 0),
             0x4E => (LSR, Absolute, 3, 6, 0),
@@ -512,6 +596,7 @@ impl<'rom> Cpu<'rom> {
             0x68 => (PLA, Implied, 1, 4, 0),
             0x69 => (ADC, Immediate, 2, 2, 0),
             0x6A => (ROR, Accumulator, 1, 2, 0),
+            0x6B => (ARR, Immediate, 2, 2, 0),
             0x6C => (JMP, Indirect, 3, 5, 0),
             0x6D => (ADC, Absolute, 3, 4, 0),
             0x6E => (ROR, Absolute, 3, 6, 0),
@@ -528,7 +613,7 @@ impl<'rom> Cpu<'rom> {
             0x7D => (ADC, AbsoluteX, 3, 4, 1),
             0x7E => (ROR, AbsoluteX, 3, 7, 0),
             0x7F => (RRA, AbsoluteX, 3, 6, 1),
-            0x80 => (NOP, Immediate, 2, 2, 0),
+            0x80 | 0x82 | 0x89 | 0xC2 | 0xE2 => (NOP, Immediate, 2, 2, 0),
             0x81 => (STA, IndexedIndirect, 2, 6, 0),
             0x83 => (SAX, IndexedIndirect, 2, 6, 0),
             0x84 => (STY, ZeroPage, 2, 3, 0),
@@ -550,7 +635,9 @@ impl<'rom> Cpu<'rom> {
             0x98 => (TYA, Implied, 1, 2, 0),
             0x99 => (STA, AbsoluteY, 3, 5, 0),
             0x9A => (TXS, Implied, 1, 2, 0),
+            0x9C => (SHY, AbsoluteX, 3, 5, 1),
             0x9D => (STA, AbsoluteX, 3, 5, 0),
+            0x9E => (SHX, AbsoluteY, 3, 5, 1),
             0xA0 => (LDY, Immediate, 2, 2, 0),
             0xA1 => (LDA, IndexedIndirect, 2, 6, 0),
             0xA2 => (LDX, Immediate, 2, 2, 0),
@@ -563,6 +650,7 @@ impl<'rom> Cpu<'rom> {
             0xA9 => (LDA, Immediate, 2, 2, 0),
             0xAA => (TAX, Implied, 1, 2, 0),
             0xAC => (LDY, Absolute, 3, 4, 0),
+            0xAB => (LAX, Immediate, 2, 2, 0),
             0xAD => (LDA, Absolute, 3, 4, 0),
             0xAE => (LDX, Absolute, 3, 4, 0),
             0xAF => (LAX, Absolute, 3, 4, 0),
@@ -590,6 +678,7 @@ impl<'rom> Cpu<'rom> {
             0xC8 => (INY, Implied, 1, 2, 0),
             0xC9 => (CMP, Immediate, 2, 2, 0),
             0xCA => (DEX, Implied, 1, 2, 0),
+            0xCB => (AXS, Immediate, 2, 2, 0),
             0xCC => (CPY, Absolute, 3, 4, 0),
             0xCD => (CMP, Absolute, 3, 4, 0),
             0xCE => (DEC, Absolute, 3, 6, 0),
@@ -642,11 +731,9 @@ impl<'rom> Cpu<'rom> {
             op: op,
             addr: addr,
             size: size,
-            cycles: if page_crossed {
-                cycles + page_cycles
-            } else {
-                cycles
-            },
+            cycles: cycles,
+            page_crossed: page_crossed,
+            page_cycles: page_cycles,
         }
     }
 
@@ -665,9 +752,12 @@ impl<'rom> Cpu<'rom> {
                 let offset = self.memory.fetch(self.pc + 1) as u16;
 
                 if offset < 0x80 {
-                    self.pc + 2 + offset
+                    self.pc.wrapping_add(2).wrapping_add(offset)
                 } else {
-                    self.pc + 2 + offset - 0x100
+                    self.pc
+                        .wrapping_add(2)
+                        .wrapping_add(offset)
+                        .wrapping_sub(0x100)
                 }
             }
             Absolute => self.memory.fetch_double(self.pc + 1),
@@ -773,6 +863,11 @@ impl P {
         self.set_if(Status::NegativeFlag, (val as i8) < 0)
     }
 
+    fn copy(&mut self, from: Status, to: Status) {
+        let set = self.is_set(from);
+        self.set_if(to, set);
+    }
+
     fn set_if(&mut self, s: Status, v: bool) {
         if v {
             self.set(s);
@@ -816,7 +911,7 @@ impl fmt::UpperHex for P {
     }
 }
 
-pub struct CpuState<'mem, 'rom: 'mem> {
+pub struct CpuState<'a> {
     pub pc: u16,
     pub a: u8,
     pub x: u8,
@@ -825,10 +920,10 @@ pub struct CpuState<'mem, 'rom: 'mem> {
     pub sp: u8,
     pub cycles: usize,
     pub instr: Instruction,
-    pub mem: &'mem Memory<'rom>,
+    pub mem: &'a Memory,
 }
 
-impl<'a, 'b> fmt::Display for CpuState<'a, 'b> {
+impl<'a> fmt::Display for CpuState<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
                "{pc:04X}  {bytecode:9} {instr:31} A:{a:02X} X:{x:02X} \
@@ -847,31 +942,23 @@ impl<'a, 'b> fmt::Display for CpuState<'a, 'b> {
 
 #[cfg(test)]
 mod test {
+    use memory::Memory;
     use rom::Rom;
     use std::fs::File;
-    use std::io::{BufRead, BufReader, Read};
+    use std::io::{BufRead, BufReader};
     use std::path::Path;
     use super::{Cpu, Status};
 
     #[test]
     fn nestest() {
-        let buf = {
-            let mut f = File::open(Path::new("test/nestest.nes")).unwrap();
-            let mut buf = Vec::new();
-            f.read_to_end(&mut buf).unwrap();
-            buf
-        };
-
-        let (_, rom) = Rom::parse(buf.as_slice()).unwrap();
-
         let expected_states = {
-            let f = File::open(Path::new("test/nestest.log")).unwrap();
+            let f = File::open(Path::new("test/cpu/nestest.log")).unwrap();
             let reader = BufReader::new(f);
             reader.lines().collect::<Vec<_>>()
         };
 
-        let mut cpu = Cpu::new(rom);
-        cpu.pc = 0xC000;
+        let mut cpu = Cpu::new(Rom::from_file("test/cpu/nestest.nes"));
+        cpu.jump(0xC000);
 
         println!("");
         for expected_state in expected_states {
@@ -887,6 +974,96 @@ mod test {
     }
 
     #[test]
+    fn abs_x_wrap() {
+        run_test_rom("test/cpu/abs_x_wrap.nes");
+    }
+
+    #[test]
+    fn branch_wrap() {
+        run_test_rom("test/cpu/branch_wrap.nes");
+    }
+
+    #[test]
+    fn basics() {
+        run_test_rom("test/cpu/basics.nes");
+    }
+
+    #[test]
+    fn implied() {
+        run_test_rom("test/cpu/implied.nes");
+    }
+
+    #[test]
+    fn immediate() {
+        run_test_rom("test/cpu/immediate.nes");
+    }
+
+    #[test]
+    fn zero_page() {
+        run_test_rom("test/cpu/zero_page.nes");
+    }
+
+    #[test]
+    fn zp_xy() {
+        run_test_rom("test/cpu/zp_xy.nes");
+    }
+
+    #[test]
+    fn absolute() {
+        run_test_rom("test/cpu/absolute.nes");
+    }
+
+    #[test]
+    fn abs_xy() {
+        run_test_rom("test/cpu/abs_xy.nes");
+    }
+
+    #[test]
+    fn ind_x() {
+        run_test_rom("test/cpu/ind_x.nes");
+    }
+
+    #[test]
+    fn ind_y() {
+        run_test_rom("test/cpu/ind_y.nes");
+    }
+
+    #[test]
+    fn branches() {
+        run_test_rom("test/cpu/branches.nes");
+    }
+
+    #[test]
+    fn stack() {
+        run_test_rom("test/cpu/stack.nes");
+    }
+
+    #[test]
+    fn jmp_jsr() {
+        run_test_rom("test/cpu/jmp_jsr.nes");
+    }
+
+    #[test]
+    fn rts() {
+        run_test_rom("test/cpu/rts.nes");
+    }
+
+    #[test]
+    fn rti() {
+        run_test_rom("test/cpu/rti.nes");
+    }
+
+    #[test]
+    fn brk() {
+        run_test_rom("test/cpu/brk.nes");
+    }
+
+    #[test]
+    fn special() {
+        run_test_rom("test/cpu/special.nes");
+    }
+
+    #[test]
     fn bit_ops_on_p() {
         let mut p = super::P::new();
 
@@ -895,5 +1072,37 @@ mod test {
 
         p.unset(Status::CarryFlag);
         assert!(!p.is_set(Status::CarryFlag));
+    }
+
+    fn run_test_rom(path: &str) {
+        let mut cpu = Cpu::new(Rom::from_file(path));
+
+        loop {
+            cpu.step();
+
+            let state = cpu.state();
+            let test_activity = state.mem.fetch_multi(0x6001, 3);
+
+            if &[0xDEu8, 0xB0, 0x61] == test_activity.as_slice() {
+                match state.mem.fetch(0x6000u16) {
+                    0x00 => break,
+                    0x80 => {}
+                    _ => panic!("{}", read_message(&state.mem)),
+                }
+            }
+        }
+    }
+
+    fn read_message(mem: &Memory) -> String {
+        let mut size = 0;
+        for i in 0x6004u16.. {
+            if mem.fetch(i) == 0 {
+                size = i - 0x6004;
+                break;
+            }
+        }
+
+        let bytes = mem.fetch_multi(0x6004, size as usize);
+        String::from_utf8_lossy(&bytes).into()
     }
 }

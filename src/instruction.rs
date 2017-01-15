@@ -27,6 +27,8 @@ pub struct Instruction {
     pub addr: u16,
     pub size: u8,
     pub cycles: u8,
+    pub page_cycles: u8,
+    pub page_crossed: bool,
 }
 
 impl Instruction {

@@ -1,18 +1,21 @@
 use nom::le_u8;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
-pub struct Rom<'rom> {
+pub struct Rom {
     pub flags_6: u8, // TODO
     pub flags_7: u8, // TODO
     pub size_prg_ram: u8, // TODO
     pub flags_9: u8, // TODO
     pub flags_10: u8, // TODO
-    pub prg: &'rom [u8],
-    pub chr: &'rom [u8],
+    pub prg: Vec<u8>,
+    pub chr: Vec<u8>,
     pub mapper: u8,
     pub sram: [u8; 0x2000],
 }
 
-impl<'rom> Rom<'rom> {
+impl Rom {
     #[cfg(test)]
     pub fn empty() -> Self {
         Rom {
@@ -21,11 +24,23 @@ impl<'rom> Rom<'rom> {
             size_prg_ram: 0,
             flags_9: 0,
             flags_10: 0,
-            prg: &[],
-            chr: &[],
+            prg: vec![],
+            chr: vec![],
             mapper: 0,
             sram: [0; 0x2000],
         }
+    }
+
+    pub fn from_file(path: &str) -> Self {
+        let buf = {
+            let mut f = File::open(Path::new(path)).unwrap();
+            let mut buf = Vec::new();
+            f.read_to_end(&mut buf).unwrap();
+            buf
+        };
+
+        let (_, rom) = Rom::parse(buf.as_slice()).unwrap();
+        rom
     }
 
     named!(pub parse<Rom>, do_parse!(
@@ -51,8 +66,8 @@ impl<'rom> Rom<'rom> {
                 size_prg_ram: if size_prg_ram == 0 { 1 } else { size_prg_ram },
                 flags_9: flags_7,
                 flags_10: flags_10,
-                prg: prg,
-                chr: chr,
+                prg: prg.to_vec(),
+                chr: chr.to_vec(),
                 mapper: lo_mapper | hi_mapper,
                 sram: [0; 0x2000],
             }
@@ -69,7 +84,7 @@ mod test {
 
     #[test]
     fn nestest_decode() {
-        let mut f = File::open(Path::new("test/nestest.nes")).unwrap();
+        let mut f = File::open(Path::new("test/cpu/nestest.nes")).unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
