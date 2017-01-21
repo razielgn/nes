@@ -1,14 +1,6 @@
-#[macro_use]
-extern crate nom;
+extern crate nes;
 
-mod cpu;
-mod instruction;
-mod memory;
-mod ppu;
-mod rom;
-
-use cpu::Cpu;
-use rom::Rom;
+use nes::{Cpu, Rom};
 use std::env;
 
 fn main() {

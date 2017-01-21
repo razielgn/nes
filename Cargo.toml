@@ -3,5 +3,17 @@ name = "nes"
 version = "0.1.0"
 authors = ["Federico Ravasio <ravasio.federico@gmail.com>"]
 
+[lib]
+name = "nes"
+path = "src/nes/lib.rs"
+bench = false
+doctest = false
+
+[[bin]]
+name = "nes"
+bench = false
+doc = false
+test = false
+
 [dependencies]
 nom = "~2.0"

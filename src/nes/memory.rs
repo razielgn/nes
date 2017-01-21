@@ -59,7 +59,6 @@ impl Memory {
         hi << 8 | lo
     }
 
-    #[cfg(test)]
     pub fn fetch_multi(&self, offset: u16, bytes: usize) -> Vec<u8> {
         (0..bytes).map(|i| self.fetch(offset + i as u16)).collect()
     }
@@ -85,8 +84,8 @@ impl Memory {
 
 #[cfg(test)]
 mod test {
-    use rom::Rom;
     use super::Memory;
+    use rom::Rom;
 
     #[test]
     fn ram_access() {

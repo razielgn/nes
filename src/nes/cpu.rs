@@ -1,10 +1,10 @@
+use self::Status::*;
 use instruction::AddressingMode;
 use instruction::AddressingMode::*;
 use instruction::Instruction;
 use instruction::Label::*;
 use memory::Memory;
 use rom::Rom;
-use self::Status::*;
 use std::fmt;
 
 const BRK_VECTOR: u16 = 0xFFFE;
@@ -937,5 +937,21 @@ impl<'a> fmt::Display for CpuState<'a> {
                p = self.p,
                sp = self.sp,
                cyc = (self.cycles * 3) % 341)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{P, Status};
+
+    #[test]
+    fn bit_ops_on_p() {
+        let mut p = P::new();
+
+        p.set(Status::CarryFlag);
+        assert!(p.is_set(Status::CarryFlag));
+
+        p.unset(Status::CarryFlag);
+        assert!(!p.is_set(Status::CarryFlag));
     }
 }

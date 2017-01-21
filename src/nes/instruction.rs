@@ -1,6 +1,6 @@
-use cpu::CpuState;
 use self::AddressingMode::*;
 use self::Label::*;
+use cpu::CpuState;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AddressingMode {
