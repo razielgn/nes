@@ -7,12 +7,12 @@ use std::io::{BufRead, BufReader};
 #[test]
 fn nestest() {
     let expected_states = {
-        let f = File::open("tests/cpu/nestest.log").unwrap();
+        let f = File::open("tests/roms/nestest.log").unwrap();
         let reader = BufReader::new(f);
         reader.lines().collect::<Vec<_>>()
     };
 
-    let mut nes = Nes::from_rom("tests/cpu/nestest.nes");
+    let mut nes = Nes::from_rom("tests/roms/nestest.nes");
     nes.set_pc(0xC000);
 
     println!("");

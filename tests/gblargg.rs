@@ -4,92 +4,92 @@ use nes::{Nes, State};
 
 #[test]
 fn abs_x_wrap() {
-    run_test_rom("tests/cpu/abs_x_wrap.nes");
+    run_test_rom("tests/roms/abs_x_wrap.nes");
 }
 
 #[test]
 fn branch_wrap() {
-    run_test_rom("tests/cpu/branch_wrap.nes");
+    run_test_rom("tests/roms/branch_wrap.nes");
 }
 
 #[test]
 fn basics() {
-    run_test_rom("tests/cpu/basics.nes");
+    run_test_rom("tests/roms/basics.nes");
 }
 
 #[test]
 fn implied() {
-    run_test_rom("tests/cpu/implied.nes");
+    run_test_rom("tests/roms/implied.nes");
 }
 
 #[test]
 fn immediate() {
-    run_test_rom("tests/cpu/immediate.nes");
+    run_test_rom("tests/roms/immediate.nes");
 }
 
 #[test]
 fn zero_page() {
-    run_test_rom("tests/cpu/zero_page.nes");
+    run_test_rom("tests/roms/zero_page.nes");
 }
 
 #[test]
 fn zp_xy() {
-    run_test_rom("tests/cpu/zp_xy.nes");
+    run_test_rom("tests/roms/zp_xy.nes");
 }
 
 #[test]
 fn absolute() {
-    run_test_rom("tests/cpu/absolute.nes");
+    run_test_rom("tests/roms/absolute.nes");
 }
 
 #[test]
 fn abs_xy() {
-    run_test_rom("tests/cpu/abs_xy.nes");
+    run_test_rom("tests/roms/abs_xy.nes");
 }
 
 #[test]
 fn ind_x() {
-    run_test_rom("tests/cpu/ind_x.nes");
+    run_test_rom("tests/roms/ind_x.nes");
 }
 
 #[test]
 fn ind_y() {
-    run_test_rom("tests/cpu/ind_y.nes");
+    run_test_rom("tests/roms/ind_y.nes");
 }
 
 #[test]
 fn branches() {
-    run_test_rom("tests/cpu/branches.nes");
+    run_test_rom("tests/roms/branches.nes");
 }
 
 #[test]
 fn stack() {
-    run_test_rom("tests/cpu/stack.nes");
+    run_test_rom("tests/roms/stack.nes");
 }
 
 #[test]
 fn jmp_jsr() {
-    run_test_rom("tests/cpu/jmp_jsr.nes");
+    run_test_rom("tests/roms/jmp_jsr.nes");
 }
 
 #[test]
 fn rts() {
-    run_test_rom("tests/cpu/rts.nes");
+    run_test_rom("tests/roms/rts.nes");
 }
 
 #[test]
 fn rti() {
-    run_test_rom("tests/cpu/rti.nes");
+    run_test_rom("tests/roms/rti.nes");
 }
 
 #[test]
 fn brk() {
-    run_test_rom("tests/cpu/brk.nes");
+    run_test_rom("tests/roms/brk.nes");
 }
 
 #[test]
 fn special() {
-    run_test_rom("tests/cpu/special.nes");
+    run_test_rom("tests/roms/special.nes");
 }
 
 fn run_test_rom(path: &str) {

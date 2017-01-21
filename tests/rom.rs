@@ -6,7 +6,7 @@ use std::io::Read;
 
 #[test]
 fn nestest_decode() {
-    let mut f = File::open("tests/cpu/nestest.nes").unwrap();
+    let mut f = File::open("tests/roms/nestest.nes").unwrap();
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).unwrap();
 
