@@ -31,9 +31,9 @@ impl Rom {
         }
     }
 
-    pub fn from_file(path: &str) -> Self {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let buf = {
-            let mut f = File::open(Path::new(path)).unwrap();
+            let mut f = File::open(path).unwrap();
             let mut buf = Vec::new();
             f.read_to_end(&mut buf).unwrap();
             buf

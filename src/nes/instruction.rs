@@ -1,6 +1,6 @@
 use self::AddressingMode::*;
 use self::Label::*;
-use cpu::CpuState;
+use State;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AddressingMode {
@@ -32,27 +32,27 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn bytecode(&self, s: &CpuState) -> String {
+    pub fn bytecode(&self, s: &State) -> String {
         let args = match self.mode {
             Absolute => {
                 format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8)
             }
             Indirect | AbsoluteX | AbsoluteY => {
-                let param = s.mem.fetch_double(s.pc + 1);
+                let param = s.memory.fetch_double(s.pc + 1);
                 format!("{:02X} {:02X}", param as u8, param >> 8 as u8)
             }
             ZeroPageX | ZeroPageY => {
-                let param = s.mem.fetch(s.pc + 1);
+                let param = s.memory.fetch(s.pc + 1);
                 format!("{:02X}", param)
             }
-            Immediate => format!("{:02X}", s.mem.fetch(self.addr)),
+            Immediate => format!("{:02X}", s.memory.fetch(self.addr)),
             Implied | Accumulator => "".into(),
             Relative => {
                 format!("{:02X}",
                         self.addr.wrapping_sub(s.pc).wrapping_sub(2) as u8)
             }
             IndexedIndirect | IndirectIndexed => {
-                let param = s.mem.fetch(s.pc + 1);
+                let param = s.memory.fetch(s.pc + 1);
                 format!("{:02X}", param)
             }
             _ => format!("{:02X}", self.addr as u8),
@@ -61,7 +61,7 @@ impl Instruction {
         format!("{:02X} {:6}", self.op, args)
     }
 
-    pub fn to_string(&self, s: &CpuState) -> String {
+    pub fn to_string(&self, s: &State) -> String {
         let args = match self.mode {
             Absolute => {
                 match self.label {
@@ -69,53 +69,53 @@ impl Instruction {
                     _ => {
                         format!("${:04X} = {:02X}",
                                 self.addr,
-                                s.mem.fetch(self.addr))
+                                s.memory.fetch(self.addr))
                     }
                 }
             }
             AbsoluteX => {
-                let param = s.mem.fetch_double(s.pc + 1);
+                let param = s.memory.fetch_double(s.pc + 1);
                 format!("${:04X},X @ {:04X} = {:02X}",
                         param,
                         self.addr,
-                        s.mem.fetch(self.addr))
+                        s.memory.fetch(self.addr))
             }
             AbsoluteY => {
-                let param = s.mem.fetch_double(s.pc + 1);
+                let param = s.memory.fetch_double(s.pc + 1);
                 format!("${:04X},Y @ {:04X} = {:02X}",
                         param,
                         self.addr,
-                        s.mem.fetch(self.addr))
+                        s.memory.fetch(self.addr))
             }
-            Immediate => format!("#${:02X}", s.mem.fetch(self.addr)),
+            Immediate => format!("#${:02X}", s.memory.fetch(self.addr)),
             ZeroPage => {
-                format!("${:02X} = {:02X}", self.addr, s.mem.fetch(self.addr))
+                format!("${:02X} = {:02X}", self.addr, s.memory.fetch(self.addr))
             }
             ZeroPageX => {
-                let addr = s.mem.fetch(s.pc + 1);
+                let addr = s.memory.fetch(s.pc + 1);
                 format!("${:02X},X @ {:02X} = {:02X}",
                         addr,
                         addr.wrapping_add(s.x),
-                        s.mem.fetch(self.addr))
+                        s.memory.fetch(self.addr))
             }
             ZeroPageY => {
-                let addr = s.mem.fetch(s.pc + 1);
+                let addr = s.memory.fetch(s.pc + 1);
                 format!("${:02X},Y @ {:02X} = {:02X}",
                         addr,
                         addr.wrapping_add(s.y),
-                        s.mem.fetch(self.addr))
+                        s.memory.fetch(self.addr))
             }
             Relative => format!("${:04X}", self.addr),
             Accumulator => "A".into(),
             Indirect => {
-                let param = s.mem.fetch_double(s.pc + 1);
-                let value = s.mem.fetch_double_bug(param);
+                let param = s.memory.fetch_double(s.pc + 1);
+                let value = s.memory.fetch_double_bug(param);
                 format!("(${:04X}) = {:04X}", param, value)
             }
             IndexedIndirect => {
-                let param = s.mem.fetch(s.pc + 1);
+                let param = s.memory.fetch(s.pc + 1);
                 let indir = param.wrapping_add(s.x);
-                let val = s.mem.fetch_double_bug(self.addr);
+                let val = s.memory.fetch_double_bug(self.addr);
                 format!("(${:02X},X) @ {:02X} = {:04X} = {:02X}",
                         param,
                         indir,
@@ -123,9 +123,9 @@ impl Instruction {
                         val)
             }
             IndirectIndexed => {
-                let param = s.mem.fetch(s.pc + 1);
-                let indir = s.mem.fetch_double_bug(param as u16);
-                let val = s.mem.fetch(indir.wrapping_add(s.y as u16));
+                let param = s.memory.fetch(s.pc + 1);
+                let indir = s.memory.fetch_double_bug(param as u16);
+                let val = s.memory.fetch(indir.wrapping_add(s.y as u16));
                 format!("(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
                         param,
                         indir,

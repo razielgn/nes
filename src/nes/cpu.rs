@@ -4,49 +4,29 @@ use instruction::AddressingMode::*;
 use instruction::Instruction;
 use instruction::Label::*;
 use memory::Memory;
-use rom::Rom;
-use std::fmt;
 
 const BRK_VECTOR: u16 = 0xFFFE;
 
 pub struct Cpu {
-    cycles: usize,
-    pc: u16,
-    sp: u8,
-    p: P,
-    a: u8,
-    x: u8,
-    y: u8,
-    memory: Memory,
+    pub cycles: usize,
+    pub pc: u16,
+    pub sp: u8,
+    pub p: P,
+    pub a: u8,
+    pub x: u8,
+    pub y: u8,
 }
 
 impl Cpu {
-    pub fn new(rom: Rom) -> Self {
-        let memory = Memory::new(rom);
-
+    pub fn new(pc: u16) -> Self {
         Cpu {
             cycles: 0,
-            pc: memory.fetch_double(0xFFFC),
+            pc: pc,
             sp: 0xFD,
             p: P::new(),
             a: 0,
             x: 0,
             y: 0,
-            memory: memory,
-        }
-    }
-
-    pub fn state(&self) -> CpuState {
-        CpuState {
-            pc: self.pc,
-            a: self.a,
-            x: self.x,
-            y: self.y,
-            p: self.p,
-            sp: self.sp,
-            cycles: self.cycles,
-            instr: self.fetch(),
-            mem: &self.memory,
         }
     }
 
@@ -54,8 +34,8 @@ impl Cpu {
         self.pc = addr;
     }
 
-    pub fn step(&mut self) {
-        let instr = self.fetch();
+    pub fn step(&mut self, memory: &mut Memory) {
+        let instr = self.fetch(memory);
         let addr = instr.addr;
 
         self.pc += instr.size as u16;
@@ -71,59 +51,59 @@ impl Cpu {
             }
             JSR => {
                 let pc = self.pc;
-                self.push_double(pc - 1);
+                self.push_double(pc - 1, memory);
                 self.jump(addr);
             }
             RTS => {
-                let addr = self.pop_double() + 1;
+                let addr = self.pop_double(memory) + 1;
                 self.jump(addr);
             }
             RTI => {
-                self.pop_p();
+                self.pop_p(memory);
 
-                let addr = self.pop_double();
+                let addr = self.pop_double(memory);
                 self.jump(addr);
             }
-            PHP => self.php(),
+            PHP => self.php(memory),
             PHA => {
                 let a = self.a;
-                self.push(a);
+                self.push(a, memory);
             }
             PLA => {
-                self.a = self.pop();
+                self.a = self.pop(memory);
                 self.p.set_if_zn(self.a);
             }
             PLP => {
-                self.pop_p();
+                self.pop_p(memory);
             }
             LDA => {
-                self.a = self.memory.fetch(addr);
+                self.a = memory.fetch(addr);
                 self.p.set_if_zn(self.a);
             }
             LDX => {
-                self.x = self.memory.fetch(addr);
+                self.x = memory.fetch(addr);
                 self.p.set_if_zn(self.x);
             }
             LDY => {
-                self.y = self.memory.fetch(addr);
+                self.y = memory.fetch(addr);
                 self.p.set_if_zn(self.y);
             }
             STX => {
-                self.memory.store(addr, self.x);
+                memory.store(addr, self.x);
             }
             STY => {
-                self.memory.store(addr, self.y);
+                memory.store(addr, self.y);
             }
             STA => {
-                self.memory.store(addr, self.a);
+                memory.store(addr, self.a);
             }
             LAX => {
-                self.a = self.memory.fetch(addr);
+                self.a = memory.fetch(addr);
                 self.x = self.a;
                 self.p.set_if_zn(self.a);
             }
             SAX => {
-                self.memory.store(addr, self.a & self.x);
+                memory.store(addr, self.a & self.x);
             }
             NOP => {}
             SEC => {
@@ -191,31 +171,31 @@ impl Cpu {
                 }
             }
             BIT => {
-                let m = self.memory.fetch(addr);
+                let m = memory.fetch(addr);
                 let res = self.a & m;
 
                 self.p.set_if_zero(res);
                 self.p.set_if_negative(m);
                 self.p.set_if(OverflowFlag, (m >> 6) & 1 == 1);
             }
-            AND => self.and(instr),
-            ORA => self.ora(instr),
-            EOR => self.eor(instr),
-            CMP => self.cmp(instr),
+            AND => self.and(instr, memory),
+            ORA => self.ora(instr, memory),
+            EOR => self.eor(instr, memory),
+            CMP => self.cmp(instr, memory),
             CPY => {
-                let m = self.memory.fetch(addr);
+                let m = memory.fetch(addr);
                 let n = self.y.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.y >= m);
                 self.p.set_if_zn(n);
             }
             CPX => {
-                let m = self.memory.fetch(addr);
+                let m = memory.fetch(addr);
                 let n = self.x.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.x >= m);
                 self.p.set_if_zn(n);
             }
-            ADC => self.adc(instr),
-            SBC => self.sbc(instr),
+            ADC => self.adc(instr, memory),
+            SBC => self.sbc(instr, memory),
             INY => {
                 self.y = self.y.wrapping_add(1);
                 self.p.set_if_zn(self.y);
@@ -252,45 +232,45 @@ impl Cpu {
                 self.x = self.sp;
                 self.p.set_if_zn(self.x);
             }
-            LSR => self.lsr(instr),
-            ASL => self.asl(instr),
-            ROR => self.ror(instr),
-            ROL => self.rol(instr),
-            INC => self.inc(instr),
-            DEC => self.dec(instr),
+            LSR => self.lsr(instr, memory),
+            ASL => self.asl(instr, memory),
+            ROR => self.ror(instr, memory),
+            ROL => self.rol(instr, memory),
+            INC => self.inc(instr, memory),
+            DEC => self.dec(instr, memory),
             DCP => {
-                self.dec(instr);
-                self.cmp(instr);
+                self.dec(instr, memory);
+                self.cmp(instr, memory);
             }
             ISB => {
-                self.inc(instr);
-                self.sbc(instr);
+                self.inc(instr, memory);
+                self.sbc(instr, memory);
             }
             SLO => {
-                self.asl(instr);
-                self.ora(instr);
+                self.asl(instr, memory);
+                self.ora(instr, memory);
             }
             RLA => {
-                self.rol(instr);
-                self.and(instr);
+                self.rol(instr, memory);
+                self.and(instr, memory);
             }
             RRA => {
-                self.ror(instr);
-                self.adc(instr);
+                self.ror(instr, memory);
+                self.adc(instr, memory);
             }
             SRE => {
-                self.lsr(instr);
-                self.eor(instr);
+                self.lsr(instr, memory);
+                self.eor(instr, memory);
             }
             CLI => {
                 self.p.unset(InterruptDisable);
             }
             ANC => {
-                self.and(instr);
+                self.and(instr, memory);
                 self.p.copy(NegativeFlag, CarryFlag);
             }
             ALR => {
-                self.a &= self.memory.fetch(instr.addr);
+                self.a &= memory.fetch(instr.addr);
                 self.p.set_if(CarryFlag, self.a & 0x01 == 1);
 
                 self.a >>= 1;
@@ -298,7 +278,7 @@ impl Cpu {
                 self.p.unset(NegativeFlag);
             }
             ARR => {
-                self.and(instr);
+                self.and(instr, memory);
                 self.ror_acc();
 
                 let c = (self.a >> 6) & 1;
@@ -306,7 +286,7 @@ impl Cpu {
                 self.p.set_if(OverflowFlag, (c ^ (self.a >> 5) & 1) == 1);
             }
             AXS => {
-                let m = self.memory.fetch(instr.addr);
+                let m = memory.fetch(instr.addr);
                 let n = (self.a & self.x).wrapping_sub(m);
 
                 self.p.set_if(CarryFlag, (self.a & self.x) >= m);
@@ -316,37 +296,41 @@ impl Cpu {
             }
             SHY => {
                 let (x, y) = (self.x, self.y);
-                self.strange_address_write(instr, y, x);
+                self.strange_address_write(instr, y, x, memory);
             }
             SHX => {
                 let (x, y) = (self.x, self.y);
-                self.strange_address_write(instr, x, y);
+                self.strange_address_write(instr, x, y, memory);
             }
             BRK => {
                 let pc = self.pc + 1;
-                self.push_double(pc);
-                self.php();
+                self.push_double(pc, memory);
+                self.php(memory);
                 self.sei();
 
-                let addr = self.memory.fetch_double(BRK_VECTOR);
+                let addr = memory.fetch_double(BRK_VECTOR);
                 self.jump(addr);
             }
             _ => panic!("can't execute {:?}", instr),
         }
     }
 
-    fn php(&mut self) {
+    fn php(&mut self, memory: &mut Memory) {
         let mut p = self.p;
         p.set(BreakCommand);
 
-        self.push(p.into());
+        self.push(p.into(), memory);
     }
 
     fn sei(&mut self) {
         self.p.set(InterruptDisable);
     }
 
-    fn strange_address_write(&mut self, instr: Instruction, val: u8, idx: u8) {
+    fn strange_address_write(&mut self,
+                             instr: Instruction,
+                             val: u8,
+                             idx: u8,
+                             memory: &mut Memory) {
         let addr = if instr.page_crossed {
             instr.addr & ((val as u16) << 8) | (instr.addr & 0x00FF)
         } else {
@@ -354,19 +338,19 @@ impl Cpu {
         };
 
         let orig_addr = instr.addr.wrapping_sub(idx as u16);
-        self.memory.store(addr, val & ((orig_addr >> 8) as u8 + 1));
+        memory.store(addr, val & ((orig_addr >> 8) as u8 + 1));
     }
 
-    fn inc(&mut self, i: Instruction) {
-        let m = self.memory.fetch(i.addr).wrapping_add(1);
+    fn inc(&mut self, i: Instruction, memory: &mut Memory) {
+        let m = memory.fetch(i.addr).wrapping_add(1);
         self.p.set_if_zn(m);
-        self.memory.store(i.addr, m);
+        memory.store(i.addr, m);
     }
 
-    fn dec(&mut self, i: Instruction) {
-        let m = self.memory.fetch(i.addr).wrapping_sub(1);
+    fn dec(&mut self, i: Instruction, memory: &mut Memory) {
+        let m = memory.fetch(i.addr).wrapping_sub(1);
         self.p.set_if_zn(m);
-        self.memory.store(i.addr, m);
+        memory.store(i.addr, m);
     }
 
     fn dex(&mut self) {
@@ -374,8 +358,8 @@ impl Cpu {
         self.p.set_if_zn(self.x);
     }
 
-    fn cmp(&mut self, i: Instruction) {
-        let m = self.memory.fetch(i.addr);
+    fn cmp(&mut self, i: Instruction, memory: &Memory) {
+        let m = memory.fetch(i.addr);
         let n = self.a.wrapping_sub(m);
 
         self.p.set_if(CarryFlag, self.a >= m);
@@ -383,8 +367,8 @@ impl Cpu {
         self.p.set_if_zero(n);
     }
 
-    fn sbc(&mut self, i: Instruction) {
-        let m = self.memory.fetch(i.addr);
+    fn sbc(&mut self, i: Instruction, memory: &Memory) {
+        let m = memory.fetch(i.addr);
         let c = if self.p.is_set(CarryFlag) { 0 } else { 1 };
         let (sub, overflow1) = self.a.overflowing_sub(m);
         let (sub, overflow2) = sub.overflowing_sub(c);
@@ -398,30 +382,30 @@ impl Cpu {
         self.a = sub;
     }
 
-    fn asl(&mut self, i: Instruction) {
+    fn asl(&mut self, i: Instruction, memory: &mut Memory) {
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a >> 7 & 1 == 1);
             self.a <<= 1;
             self.p.set_if_zn(self.a);
         } else {
-            let mut m = self.memory.fetch(i.addr);
+            let mut m = memory.fetch(i.addr);
             self.p.set_if(CarryFlag, m >> 7 & 1 == 1);
             m <<= 1;
             self.p.set_if_zn(m);
-            self.memory.store(i.addr, m);
+            memory.store(i.addr, m);
         }
     }
 
-    fn ror(&mut self, i: Instruction) {
+    fn ror(&mut self, i: Instruction, memory: &mut Memory) {
         if i.mode == Accumulator {
             self.ror_acc();
         } else {
             let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
-            let mut m = self.memory.fetch(i.addr);
+            let mut m = memory.fetch(i.addr);
             self.p.set_if(CarryFlag, m & 1 == 1);
             m = (m >> 1) | (c << 7);
             self.p.set_if_zn(m);
-            self.memory.store(i.addr, m);
+            memory.store(i.addr, m);
         }
     }
 
@@ -432,7 +416,7 @@ impl Cpu {
         self.p.set_if_zn(self.a);
     }
 
-    fn rol(&mut self, i: Instruction) {
+    fn rol(&mut self, i: Instruction, memory: &mut Memory) {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
         if i.mode == Accumulator {
@@ -440,31 +424,31 @@ impl Cpu {
             self.a = (self.a << 1) | c;
             self.p.set_if_zn(self.a);
         } else {
-            let mut m = self.memory.fetch(i.addr);
+            let mut m = memory.fetch(i.addr);
             self.p.set_if(CarryFlag, (m >> 7) & 1 == 1);
             m = (m << 1) | c;
             self.p.set_if_zn(m);
-            self.memory.store(i.addr, m);
+            memory.store(i.addr, m);
         }
     }
 
-    fn ora(&mut self, i: Instruction) {
-        self.a |= self.memory.fetch(i.addr);
+    fn ora(&mut self, i: Instruction, memory: &Memory) {
+        self.a |= memory.fetch(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn eor(&mut self, i: Instruction) {
-        self.a ^= self.memory.fetch(i.addr);
+    fn eor(&mut self, i: Instruction, memory: &Memory) {
+        self.a ^= memory.fetch(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn and(&mut self, i: Instruction) {
-        self.a &= self.memory.fetch(i.addr);
+    fn and(&mut self, i: Instruction, memory: &Memory) {
+        self.a &= memory.fetch(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn adc(&mut self, i: Instruction) {
-        let m = self.memory.fetch(i.addr);
+    fn adc(&mut self, i: Instruction, memory: &Memory) {
+        let m = memory.fetch(i.addr);
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
         let (sum, overflow1) = self.a.overflowing_add(m);
         let (sum, overflow2) = sum.overflowing_add(c);
@@ -478,17 +462,17 @@ impl Cpu {
         self.a = sum;
     }
 
-    fn lsr(&mut self, i: Instruction) {
+    fn lsr(&mut self, i: Instruction, memory: &mut Memory) {
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a & 1 == 1);
             self.a >>= 1;
             self.p.set_if_zn(self.a);
         } else {
-            let mut m = self.memory.fetch(i.addr);
+            let mut m = memory.fetch(i.addr);
             self.p.set_if(CarryFlag, m & 1 == 1);
             m >>= 1;
             self.p.set_if_zn(m);
-            self.memory.store(i.addr, m);
+            memory.store(i.addr, m);
         }
     }
 
@@ -500,8 +484,9 @@ impl Cpu {
         }
     }
 
-    fn fetch(&self) -> Instruction {
-        let op = self.memory.fetch(self.pc);
+    pub fn fetch(&self, memory: &Memory) -> Instruction {
+        let op = memory.fetch(self.pc);
+
         let (label, mode, size, cycles, page_cycles) = match op {
             0x00 => (BRK, Implied, 1, 7, 0),
             0x01 => (ORA, IndexedIndirect, 2, 6, 0),
@@ -723,7 +708,7 @@ impl Cpu {
             op => panic!("unknown opcode 0x{:X} at addr {:04X}", op, self.pc),
         };
 
-        let (addr, page_crossed) = self.addr_from_mode(mode);
+        let (addr, page_crossed) = self.addr_from_mode(mode, memory);
 
         Instruction {
             mode: mode,
@@ -737,19 +722,18 @@ impl Cpu {
         }
     }
 
-    fn addr_from_mode(&self, mode: AddressingMode) -> (u16, bool) {
+    fn addr_from_mode(&self,
+                      mode: AddressingMode,
+                      memory: &Memory)
+                      -> (u16, bool) {
         let addr = match mode {
             Implied | Accumulator => 0,
             Immediate => self.pc + 1,
-            ZeroPage => self.memory.fetch(self.pc + 1) as u16,
-            ZeroPageX => {
-                self.memory.fetch(self.pc + 1).wrapping_add(self.x) as u16
-            }
-            ZeroPageY => {
-                self.memory.fetch(self.pc + 1).wrapping_add(self.y) as u16
-            }
+            ZeroPage => memory.fetch(self.pc + 1) as u16,
+            ZeroPageX => memory.fetch(self.pc + 1).wrapping_add(self.x) as u16,
+            ZeroPageY => memory.fetch(self.pc + 1).wrapping_add(self.y) as u16,
             Relative => {
-                let offset = self.memory.fetch(self.pc + 1) as u16;
+                let offset = memory.fetch(self.pc + 1) as u16;
 
                 if offset < 0x80 {
                     self.pc.wrapping_add(2).wrapping_add(offset)
@@ -760,25 +744,24 @@ impl Cpu {
                         .wrapping_sub(0x100)
                 }
             }
-            Absolute => self.memory.fetch_double(self.pc + 1),
+            Absolute => memory.fetch_double(self.pc + 1),
             AbsoluteX => {
-                self.memory.fetch_double(self.pc + 1).wrapping_add(self.x as u16)
+                memory.fetch_double(self.pc + 1).wrapping_add(self.x as u16)
             }
             AbsoluteY => {
-                self.memory.fetch_double(self.pc + 1).wrapping_add(self.y as u16)
+                memory.fetch_double(self.pc + 1).wrapping_add(self.y as u16)
             }
             Indirect => {
-                let addr = self.memory.fetch_double(self.pc + 1);
-                self.memory.fetch_double_bug(addr)
+                let addr = memory.fetch_double(self.pc + 1);
+                memory.fetch_double_bug(addr)
             }
             IndexedIndirect => {
-                let addr = self.memory.fetch(self.pc + 1).wrapping_add(self.x);
-                self.memory.fetch_double_bug(addr as u16)
+                let addr = memory.fetch(self.pc + 1).wrapping_add(self.x);
+                memory.fetch_double_bug(addr as u16)
             }
             IndirectIndexed => {
-                let addr = self.memory.fetch(self.pc + 1);
-                self.memory
-                    .fetch_double_bug(addr as u16)
+                let addr = memory.fetch(self.pc + 1);
+                memory.fetch_double_bug(addr as u16)
                     .wrapping_add(self.y as u16)
             }
         };
@@ -794,33 +777,33 @@ impl Cpu {
         (addr, page_crossed)
     }
 
-    fn push(&mut self, val: u8) {
-        self.memory.store(0x100 + self.sp as u16, val);
+    fn push(&mut self, val: u8, memory: &mut Memory) {
+        memory.store(0x100 + self.sp as u16, val);
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    fn push_double(&mut self, val: u16) {
+    fn push_double(&mut self, val: u16, memory: &mut Memory) {
         let hi = (val >> 8) as u8;
         let lo = val as u8;
 
-        self.push(hi);
-        self.push(lo);
+        self.push(hi, memory);
+        self.push(lo, memory);
     }
 
-    fn pop(&mut self) -> u8 {
+    fn pop(&mut self, memory: &Memory) -> u8 {
         self.sp = self.sp.wrapping_add(1);
-        self.memory.fetch(0x100 + self.sp as u16)
+        memory.fetch(0x100 + self.sp as u16)
     }
 
-    fn pop_double(&mut self) -> u16 {
-        let lo = self.pop() as u16;
-        let hi = self.pop() as u16;
+    fn pop_double(&mut self, memory: &Memory) -> u16 {
+        let lo = self.pop(memory) as u16;
+        let hi = self.pop(memory) as u16;
 
         hi << 8 | lo
     }
 
-    fn pop_p(&mut self) {
-        self.p = self.pop().into();
+    fn pop_p(&mut self, memory: &Memory) {
+        self.p = self.pop(memory).into();
         self.p.unset(Status::BreakCommand);
         self.p.set(Status::UnusedFlag);
     }
@@ -902,41 +885,6 @@ impl From<u8> for P {
 impl Into<u8> for P {
     fn into(self) -> u8 {
         self.0
-    }
-}
-
-impl fmt::UpperHex for P {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{:02X}", self.0)
-    }
-}
-
-pub struct CpuState<'a> {
-    pub pc: u16,
-    pub a: u8,
-    pub x: u8,
-    pub y: u8,
-    pub p: P,
-    pub sp: u8,
-    pub cycles: usize,
-    pub instr: Instruction,
-    pub mem: &'a Memory,
-}
-
-impl<'a> fmt::Display for CpuState<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,
-               "{pc:04X}  {bytecode:9} {instr:31} A:{a:02X} X:{x:02X} \
-                Y:{y:02X} P:{p:02X} SP:{sp:2X} CYC:{cyc:3?}",
-               pc = self.pc,
-               bytecode = self.instr.bytecode(&self),
-               instr = self.instr.to_string(&self),
-               a = self.a,
-               x = self.x,
-               y = self.y,
-               p = self.p,
-               sp = self.sp,
-               cyc = (self.cycles * 3) % 341)
     }
 }
 

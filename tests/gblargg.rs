@@ -1,6 +1,6 @@
 extern crate nes;
 
-use nes::{Cpu, CpuState, Rom};
+use nes::{Nes, State};
 
 #[test]
 fn abs_x_wrap() {
@@ -93,16 +93,16 @@ fn special() {
 }
 
 fn run_test_rom(path: &str) {
-    let mut cpu = Cpu::new(Rom::from_file(path));
+    let mut nes = Nes::from_rom(path);
 
     loop {
-        cpu.step();
+        nes.step();
 
-        let state = cpu.state();
-        let test_activity = state.mem.fetch_multi(0x6001, 3);
+        let state = nes.state();
+        let test_activity = state.memory.fetch_multi(0x6001, 3);
 
         if &[0xDEu8, 0xB0, 0x61] == test_activity.as_slice() {
-            match state.mem.fetch(0x6000u16) {
+            match state.memory.fetch(0x6000u16) {
                 0x00 => break,
                 0x80 => {}
                 _ => panic!("{}", read_message(&state)),
@@ -111,15 +111,15 @@ fn run_test_rom(path: &str) {
     }
 }
 
-fn read_message(state: &CpuState) -> String {
+fn read_message(state: &State) -> String {
     let mut size = 0;
     for i in 0x6004u16.. {
-        if state.mem.fetch(i) == 0 {
+        if state.memory.fetch(i) == 0 {
             size = i - 0x6004;
             break;
         }
     }
 
-    let bytes = state.mem.fetch_multi(0x6004, size as usize);
+    let bytes = state.memory.fetch_multi(0x6004, size as usize);
     String::from_utf8_lossy(&bytes).into()
 }

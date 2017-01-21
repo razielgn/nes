@@ -3,11 +3,10 @@ extern crate nes;
 use nes::Rom;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
 
 #[test]
 fn nestest_decode() {
-    let mut f = File::open(Path::new("tests/cpu/nestest.nes")).unwrap();
+    let mut f = File::open("tests/cpu/nestest.nes").unwrap();
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).unwrap();
 
