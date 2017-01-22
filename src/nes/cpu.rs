@@ -3,7 +3,7 @@ use instruction::AddressingMode;
 use instruction::AddressingMode::*;
 use instruction::Instruction;
 use instruction::Label::*;
-use memory::Memory;
+use memory::MemoryMap;
 
 const BRK_VECTOR: u16 = 0xFFFE;
 
@@ -34,7 +34,7 @@ impl Cpu {
         self.pc = addr;
     }
 
-    pub fn step(&mut self, memory: &mut Memory) {
+    pub fn step(&mut self, memory: &mut MemoryMap) {
         let instr = self.fetch(memory);
         let addr = instr.addr;
 
@@ -77,33 +77,33 @@ impl Cpu {
                 self.pop_p(memory);
             }
             LDA => {
-                self.a = memory.fetch(addr);
+                self.a = memory.read(addr);
                 self.p.set_if_zn(self.a);
             }
             LDX => {
-                self.x = memory.fetch(addr);
+                self.x = memory.read(addr);
                 self.p.set_if_zn(self.x);
             }
             LDY => {
-                self.y = memory.fetch(addr);
+                self.y = memory.read(addr);
                 self.p.set_if_zn(self.y);
             }
             STX => {
-                memory.store(addr, self.x);
+                memory.write(addr, self.x);
             }
             STY => {
-                memory.store(addr, self.y);
+                memory.write(addr, self.y);
             }
             STA => {
-                memory.store(addr, self.a);
+                memory.write(addr, self.a);
             }
             LAX => {
-                self.a = memory.fetch(addr);
+                self.a = memory.read(addr);
                 self.x = self.a;
                 self.p.set_if_zn(self.a);
             }
             SAX => {
-                memory.store(addr, self.a & self.x);
+                memory.write(addr, self.a & self.x);
             }
             NOP => {}
             SEC => {
@@ -171,7 +171,7 @@ impl Cpu {
                 }
             }
             BIT => {
-                let m = memory.fetch(addr);
+                let m = memory.read(addr);
                 let res = self.a & m;
 
                 self.p.set_if_zero(res);
@@ -183,13 +183,13 @@ impl Cpu {
             EOR => self.eor(instr, memory),
             CMP => self.cmp(instr, memory),
             CPY => {
-                let m = memory.fetch(addr);
+                let m = memory.read(addr);
                 let n = self.y.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.y >= m);
                 self.p.set_if_zn(n);
             }
             CPX => {
-                let m = memory.fetch(addr);
+                let m = memory.read(addr);
                 let n = self.x.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.x >= m);
                 self.p.set_if_zn(n);
@@ -270,7 +270,7 @@ impl Cpu {
                 self.p.copy(NegativeFlag, CarryFlag);
             }
             ALR => {
-                self.a &= memory.fetch(instr.addr);
+                self.a &= memory.read(instr.addr);
                 self.p.set_if(CarryFlag, self.a & 0x01 == 1);
 
                 self.a >>= 1;
@@ -286,7 +286,7 @@ impl Cpu {
                 self.p.set_if(OverflowFlag, (c ^ (self.a >> 5) & 1) == 1);
             }
             AXS => {
-                let m = memory.fetch(instr.addr);
+                let m = memory.read(instr.addr);
                 let n = (self.a & self.x).wrapping_sub(m);
 
                 self.p.set_if(CarryFlag, (self.a & self.x) >= m);
@@ -308,14 +308,14 @@ impl Cpu {
                 self.php(memory);
                 self.sei();
 
-                let addr = memory.fetch_double(BRK_VECTOR);
+                let addr = memory.read_double(BRK_VECTOR);
                 self.jump(addr);
             }
             _ => panic!("can't execute {:?}", instr),
         }
     }
 
-    fn php(&mut self, memory: &mut Memory) {
+    fn php(&mut self, memory: &mut MemoryMap) {
         let mut p = self.p;
         p.set(BreakCommand);
 
@@ -330,7 +330,7 @@ impl Cpu {
                              instr: Instruction,
                              val: u8,
                              idx: u8,
-                             memory: &mut Memory) {
+                             memory: &mut MemoryMap) {
         let addr = if instr.page_crossed {
             instr.addr & ((val as u16) << 8) | (instr.addr & 0x00FF)
         } else {
@@ -338,19 +338,19 @@ impl Cpu {
         };
 
         let orig_addr = instr.addr.wrapping_sub(idx as u16);
-        memory.store(addr, val & ((orig_addr >> 8) as u8 + 1));
+        memory.write(addr, val & ((orig_addr >> 8) as u8 + 1));
     }
 
-    fn inc(&mut self, i: Instruction, memory: &mut Memory) {
-        let m = memory.fetch(i.addr).wrapping_add(1);
+    fn inc(&mut self, i: Instruction, memory: &mut MemoryMap) {
+        let m = memory.read(i.addr).wrapping_add(1);
         self.p.set_if_zn(m);
-        memory.store(i.addr, m);
+        memory.write(i.addr, m);
     }
 
-    fn dec(&mut self, i: Instruction, memory: &mut Memory) {
-        let m = memory.fetch(i.addr).wrapping_sub(1);
+    fn dec(&mut self, i: Instruction, memory: &mut MemoryMap) {
+        let m = memory.read(i.addr).wrapping_sub(1);
         self.p.set_if_zn(m);
-        memory.store(i.addr, m);
+        memory.write(i.addr, m);
     }
 
     fn dex(&mut self) {
@@ -358,8 +358,8 @@ impl Cpu {
         self.p.set_if_zn(self.x);
     }
 
-    fn cmp(&mut self, i: Instruction, memory: &Memory) {
-        let m = memory.fetch(i.addr);
+    fn cmp(&mut self, i: Instruction, memory: &MemoryMap) {
+        let m = memory.read(i.addr);
         let n = self.a.wrapping_sub(m);
 
         self.p.set_if(CarryFlag, self.a >= m);
@@ -367,8 +367,8 @@ impl Cpu {
         self.p.set_if_zero(n);
     }
 
-    fn sbc(&mut self, i: Instruction, memory: &Memory) {
-        let m = memory.fetch(i.addr);
+    fn sbc(&mut self, i: Instruction, memory: &MemoryMap) {
+        let m = memory.read(i.addr);
         let c = if self.p.is_set(CarryFlag) { 0 } else { 1 };
         let (sub, overflow1) = self.a.overflowing_sub(m);
         let (sub, overflow2) = sub.overflowing_sub(c);
@@ -382,30 +382,30 @@ impl Cpu {
         self.a = sub;
     }
 
-    fn asl(&mut self, i: Instruction, memory: &mut Memory) {
+    fn asl(&mut self, i: Instruction, memory: &mut MemoryMap) {
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a >> 7 & 1 == 1);
             self.a <<= 1;
             self.p.set_if_zn(self.a);
         } else {
-            let mut m = memory.fetch(i.addr);
+            let mut m = memory.read(i.addr);
             self.p.set_if(CarryFlag, m >> 7 & 1 == 1);
             m <<= 1;
             self.p.set_if_zn(m);
-            memory.store(i.addr, m);
+            memory.write(i.addr, m);
         }
     }
 
-    fn ror(&mut self, i: Instruction, memory: &mut Memory) {
+    fn ror(&mut self, i: Instruction, memory: &mut MemoryMap) {
         if i.mode == Accumulator {
             self.ror_acc();
         } else {
             let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
-            let mut m = memory.fetch(i.addr);
+            let mut m = memory.read(i.addr);
             self.p.set_if(CarryFlag, m & 1 == 1);
             m = (m >> 1) | (c << 7);
             self.p.set_if_zn(m);
-            memory.store(i.addr, m);
+            memory.write(i.addr, m);
         }
     }
 
@@ -416,7 +416,7 @@ impl Cpu {
         self.p.set_if_zn(self.a);
     }
 
-    fn rol(&mut self, i: Instruction, memory: &mut Memory) {
+    fn rol(&mut self, i: Instruction, memory: &mut MemoryMap) {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
         if i.mode == Accumulator {
@@ -424,31 +424,31 @@ impl Cpu {
             self.a = (self.a << 1) | c;
             self.p.set_if_zn(self.a);
         } else {
-            let mut m = memory.fetch(i.addr);
+            let mut m = memory.read(i.addr);
             self.p.set_if(CarryFlag, (m >> 7) & 1 == 1);
             m = (m << 1) | c;
             self.p.set_if_zn(m);
-            memory.store(i.addr, m);
+            memory.write(i.addr, m);
         }
     }
 
-    fn ora(&mut self, i: Instruction, memory: &Memory) {
-        self.a |= memory.fetch(i.addr);
+    fn ora(&mut self, i: Instruction, memory: &MemoryMap) {
+        self.a |= memory.read(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn eor(&mut self, i: Instruction, memory: &Memory) {
-        self.a ^= memory.fetch(i.addr);
+    fn eor(&mut self, i: Instruction, memory: &MemoryMap) {
+        self.a ^= memory.read(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn and(&mut self, i: Instruction, memory: &Memory) {
-        self.a &= memory.fetch(i.addr);
+    fn and(&mut self, i: Instruction, memory: &MemoryMap) {
+        self.a &= memory.read(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn adc(&mut self, i: Instruction, memory: &Memory) {
-        let m = memory.fetch(i.addr);
+    fn adc(&mut self, i: Instruction, memory: &MemoryMap) {
+        let m = memory.read(i.addr);
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
         let (sum, overflow1) = self.a.overflowing_add(m);
         let (sum, overflow2) = sum.overflowing_add(c);
@@ -462,17 +462,17 @@ impl Cpu {
         self.a = sum;
     }
 
-    fn lsr(&mut self, i: Instruction, memory: &mut Memory) {
+    fn lsr(&mut self, i: Instruction, memory: &mut MemoryMap) {
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a & 1 == 1);
             self.a >>= 1;
             self.p.set_if_zn(self.a);
         } else {
-            let mut m = memory.fetch(i.addr);
+            let mut m = memory.read(i.addr);
             self.p.set_if(CarryFlag, m & 1 == 1);
             m >>= 1;
             self.p.set_if_zn(m);
-            memory.store(i.addr, m);
+            memory.write(i.addr, m);
         }
     }
 
@@ -484,8 +484,8 @@ impl Cpu {
         }
     }
 
-    pub fn fetch(&self, memory: &Memory) -> Instruction {
-        let op = memory.fetch(self.pc);
+    pub fn fetch(&self, memory: &MemoryMap) -> Instruction {
+        let op = memory.read(self.pc);
 
         let (label, mode, size, cycles, page_cycles) = match op {
             0x00 => (BRK, Implied, 1, 7, 0),
@@ -724,16 +724,16 @@ impl Cpu {
 
     fn addr_from_mode(&self,
                       mode: AddressingMode,
-                      memory: &Memory)
+                      memory: &MemoryMap)
                       -> (u16, bool) {
         let addr = match mode {
             Implied | Accumulator => 0,
             Immediate => self.pc + 1,
-            ZeroPage => memory.fetch(self.pc + 1) as u16,
-            ZeroPageX => memory.fetch(self.pc + 1).wrapping_add(self.x) as u16,
-            ZeroPageY => memory.fetch(self.pc + 1).wrapping_add(self.y) as u16,
+            ZeroPage => memory.read(self.pc + 1) as u16,
+            ZeroPageX => memory.read(self.pc + 1).wrapping_add(self.x) as u16,
+            ZeroPageY => memory.read(self.pc + 1).wrapping_add(self.y) as u16,
             Relative => {
-                let offset = memory.fetch(self.pc + 1) as u16;
+                let offset = memory.read(self.pc + 1) as u16;
 
                 if offset < 0x80 {
                     self.pc.wrapping_add(2).wrapping_add(offset)
@@ -744,24 +744,24 @@ impl Cpu {
                         .wrapping_sub(0x100)
                 }
             }
-            Absolute => memory.fetch_double(self.pc + 1),
+            Absolute => memory.read_double(self.pc + 1),
             AbsoluteX => {
-                memory.fetch_double(self.pc + 1).wrapping_add(self.x as u16)
+                memory.read_double(self.pc + 1).wrapping_add(self.x as u16)
             }
             AbsoluteY => {
-                memory.fetch_double(self.pc + 1).wrapping_add(self.y as u16)
+                memory.read_double(self.pc + 1).wrapping_add(self.y as u16)
             }
             Indirect => {
-                let addr = memory.fetch_double(self.pc + 1);
-                memory.fetch_double_bug(addr)
+                let addr = memory.read_double(self.pc + 1);
+                memory.read_double_bug(addr)
             }
             IndexedIndirect => {
-                let addr = memory.fetch(self.pc + 1).wrapping_add(self.x);
-                memory.fetch_double_bug(addr as u16)
+                let addr = memory.read(self.pc + 1).wrapping_add(self.x);
+                memory.read_double_bug(addr as u16)
             }
             IndirectIndexed => {
-                let addr = memory.fetch(self.pc + 1);
-                memory.fetch_double_bug(addr as u16)
+                let addr = memory.read(self.pc + 1);
+                memory.read_double_bug(addr as u16)
                     .wrapping_add(self.y as u16)
             }
         };
@@ -777,12 +777,12 @@ impl Cpu {
         (addr, page_crossed)
     }
 
-    fn push(&mut self, val: u8, memory: &mut Memory) {
-        memory.store(0x100 + self.sp as u16, val);
+    fn push(&mut self, val: u8, memory: &mut MemoryMap) {
+        memory.write(0x100 + self.sp as u16, val);
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    fn push_double(&mut self, val: u16, memory: &mut Memory) {
+    fn push_double(&mut self, val: u16, memory: &mut MemoryMap) {
         let hi = (val >> 8) as u8;
         let lo = val as u8;
 
@@ -790,19 +790,19 @@ impl Cpu {
         self.push(lo, memory);
     }
 
-    fn pop(&mut self, memory: &Memory) -> u8 {
+    fn pop(&mut self, memory: &MemoryMap) -> u8 {
         self.sp = self.sp.wrapping_add(1);
-        memory.fetch(0x100 + self.sp as u16)
+        memory.read(0x100 + self.sp as u16)
     }
 
-    fn pop_double(&mut self, memory: &Memory) -> u16 {
+    fn pop_double(&mut self, memory: &MemoryMap) -> u16 {
         let lo = self.pop(memory) as u16;
         let hi = self.pop(memory) as u16;
 
         hi << 8 | lo
     }
 
-    fn pop_p(&mut self, memory: &Memory) {
+    fn pop_p(&mut self, memory: &MemoryMap) {
         self.p = self.pop(memory).into();
         self.p.unset(Status::BreakCommand);
         self.p.set(Status::UnusedFlag);

@@ -22,7 +22,7 @@ impl Ppu {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        match addr {
+        match 0x2000 + (addr % 8) {
             0x2000 => self.control1,
             0x2001 => self.control2,
             0x2002 => self.status,

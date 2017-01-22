@@ -38,21 +38,21 @@ impl Instruction {
                 format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8)
             }
             Indirect | AbsoluteX | AbsoluteY => {
-                let param = s.memory.fetch_double(s.pc + 1);
+                let param = s.memory.read_double(s.pc + 1);
                 format!("{:02X} {:02X}", param as u8, param >> 8 as u8)
             }
             ZeroPageX | ZeroPageY => {
-                let param = s.memory.fetch(s.pc + 1);
+                let param = s.memory.read(s.pc + 1);
                 format!("{:02X}", param)
             }
-            Immediate => format!("{:02X}", s.memory.fetch(self.addr)),
+            Immediate => format!("{:02X}", s.memory.read(self.addr)),
             Implied | Accumulator => "".into(),
             Relative => {
                 format!("{:02X}",
                         self.addr.wrapping_sub(s.pc).wrapping_sub(2) as u8)
             }
             IndexedIndirect | IndirectIndexed => {
-                let param = s.memory.fetch(s.pc + 1);
+                let param = s.memory.read(s.pc + 1);
                 format!("{:02X}", param)
             }
             _ => format!("{:02X}", self.addr as u8),
@@ -69,53 +69,53 @@ impl Instruction {
                     _ => {
                         format!("${:04X} = {:02X}",
                                 self.addr,
-                                s.memory.fetch(self.addr))
+                                s.memory.read(self.addr))
                     }
                 }
             }
             AbsoluteX => {
-                let param = s.memory.fetch_double(s.pc + 1);
+                let param = s.memory.read_double(s.pc + 1);
                 format!("${:04X},X @ {:04X} = {:02X}",
                         param,
                         self.addr,
-                        s.memory.fetch(self.addr))
+                        s.memory.read(self.addr))
             }
             AbsoluteY => {
-                let param = s.memory.fetch_double(s.pc + 1);
+                let param = s.memory.read_double(s.pc + 1);
                 format!("${:04X},Y @ {:04X} = {:02X}",
                         param,
                         self.addr,
-                        s.memory.fetch(self.addr))
+                        s.memory.read(self.addr))
             }
-            Immediate => format!("#${:02X}", s.memory.fetch(self.addr)),
+            Immediate => format!("#${:02X}", s.memory.read(self.addr)),
             ZeroPage => {
-                format!("${:02X} = {:02X}", self.addr, s.memory.fetch(self.addr))
+                format!("${:02X} = {:02X}", self.addr, s.memory.read(self.addr))
             }
             ZeroPageX => {
-                let addr = s.memory.fetch(s.pc + 1);
+                let addr = s.memory.read(s.pc + 1);
                 format!("${:02X},X @ {:02X} = {:02X}",
                         addr,
                         addr.wrapping_add(s.x),
-                        s.memory.fetch(self.addr))
+                        s.memory.read(self.addr))
             }
             ZeroPageY => {
-                let addr = s.memory.fetch(s.pc + 1);
+                let addr = s.memory.read(s.pc + 1);
                 format!("${:02X},Y @ {:02X} = {:02X}",
                         addr,
                         addr.wrapping_add(s.y),
-                        s.memory.fetch(self.addr))
+                        s.memory.read(self.addr))
             }
             Relative => format!("${:04X}", self.addr),
             Accumulator => "A".into(),
             Indirect => {
-                let param = s.memory.fetch_double(s.pc + 1);
-                let value = s.memory.fetch_double_bug(param);
+                let param = s.memory.read_double(s.pc + 1);
+                let value = s.memory.read_double_bug(param);
                 format!("(${:04X}) = {:04X}", param, value)
             }
             IndexedIndirect => {
-                let param = s.memory.fetch(s.pc + 1);
+                let param = s.memory.read(s.pc + 1);
                 let indir = param.wrapping_add(s.x);
-                let val = s.memory.fetch_double_bug(self.addr);
+                let val = s.memory.read_double_bug(self.addr);
                 format!("(${:02X},X) @ {:02X} = {:04X} = {:02X}",
                         param,
                         indir,
@@ -123,9 +123,9 @@ impl Instruction {
                         val)
             }
             IndirectIndexed => {
-                let param = s.memory.fetch(s.pc + 1);
-                let indir = s.memory.fetch_double_bug(param as u16);
-                let val = s.memory.fetch(indir.wrapping_add(s.y as u16));
+                let param = s.memory.read(s.pc + 1);
+                let indir = s.memory.read_double_bug(param as u16);
+                let val = s.memory.read(indir.wrapping_add(s.y as u16));
                 format!("(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
                         param,
                         indir,
