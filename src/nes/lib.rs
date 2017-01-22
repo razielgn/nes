@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate nom;
 
+mod bits;
 mod cpu;
 mod instruction;
 mod mapper;

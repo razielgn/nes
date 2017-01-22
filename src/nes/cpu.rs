@@ -4,6 +4,7 @@ use instruction::AddressingMode::*;
 use instruction::Instruction;
 use instruction::Label::*;
 use memory::MemoryMap;
+use bits::BitOps;
 
 const BRK_VECTOR: u16 = 0xFFFE;
 
@@ -271,7 +272,7 @@ impl Cpu {
             }
             ALR => {
                 self.a &= memory.read(instr.addr);
-                self.p.set_if(CarryFlag, self.a & 0x01 == 1);
+                self.p.set_if(CarryFlag, self.a.is_bit_set(0));
 
                 self.a >>= 1;
                 self.p.set_if_zero(self.a);
@@ -281,9 +282,9 @@ impl Cpu {
                 self.and(instr, memory);
                 self.ror_acc();
 
-                let c = (self.a >> 6) & 1;
+                let c = self.a.get_bit(6);
                 self.p.set_if(CarryFlag, c == 1);
-                self.p.set_if(OverflowFlag, (c ^ (self.a >> 5) & 1) == 1);
+                self.p.set_if(OverflowFlag, (c ^ self.a.get_bit(5)) == 1);
             }
             AXS => {
                 let m = memory.read(instr.addr);
@@ -384,12 +385,12 @@ impl Cpu {
 
     fn asl(&mut self, i: Instruction, memory: &mut MemoryMap) {
         if i.mode == Accumulator {
-            self.p.set_if(CarryFlag, self.a >> 7 & 1 == 1);
+            self.p.set_if(CarryFlag, self.a.is_bit_set(7));
             self.a <<= 1;
             self.p.set_if_zn(self.a);
         } else {
             let mut m = memory.read(i.addr);
-            self.p.set_if(CarryFlag, m >> 7 & 1 == 1);
+            self.p.set_if(CarryFlag, m.is_bit_set(7));
             m <<= 1;
             self.p.set_if_zn(m);
             memory.write(i.addr, m);
@@ -402,7 +403,7 @@ impl Cpu {
         } else {
             let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
             let mut m = memory.read(i.addr);
-            self.p.set_if(CarryFlag, m & 1 == 1);
+            self.p.set_if(CarryFlag, m.is_bit_set(0));
             m = (m >> 1) | (c << 7);
             self.p.set_if_zn(m);
             memory.write(i.addr, m);
@@ -411,7 +412,7 @@ impl Cpu {
 
     fn ror_acc(&mut self) {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
-        self.p.set_if(CarryFlag, self.a & 1 == 1);
+        self.p.set_if(CarryFlag, self.a.is_bit_set(0));
         self.a = (self.a >> 1) | (c << 7);
         self.p.set_if_zn(self.a);
     }
@@ -420,12 +421,12 @@ impl Cpu {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
         if i.mode == Accumulator {
-            self.p.set_if(CarryFlag, (self.a >> 7) & 1 == 1);
+            self.p.set_if(CarryFlag, self.a.is_bit_set(7));
             self.a = (self.a << 1) | c;
             self.p.set_if_zn(self.a);
         } else {
             let mut m = memory.read(i.addr);
-            self.p.set_if(CarryFlag, (m >> 7) & 1 == 1);
+            self.p.set_if(CarryFlag, m.is_bit_set(7));
             m = (m << 1) | c;
             self.p.set_if_zn(m);
             memory.write(i.addr, m);
@@ -464,12 +465,12 @@ impl Cpu {
 
     fn lsr(&mut self, i: Instruction, memory: &mut MemoryMap) {
         if i.mode == Accumulator {
-            self.p.set_if(CarryFlag, self.a & 1 == 1);
+            self.p.set_if(CarryFlag, self.a.is_bit_set(0));
             self.a >>= 1;
             self.p.set_if_zn(self.a);
         } else {
             let mut m = memory.read(i.addr);
-            self.p.set_if(CarryFlag, m & 1 == 1);
+            self.p.set_if(CarryFlag, m.is_bit_set(0));
             m >>= 1;
             self.p.set_if_zn(m);
             memory.write(i.addr, m);
@@ -864,7 +865,7 @@ impl P {
     }
 
     fn set(&mut self, s: Status) {
-        self.0 |= 1 << (s as u8);
+        self.0 = self.0.set_bit(s as u8);
     }
 
     fn unset(&mut self, s: Status) {
@@ -872,7 +873,7 @@ impl P {
     }
 
     fn is_set(&self, s: Status) -> bool {
-        (self.0 >> (s as u8)) & 1 == 1
+        self.0.is_bit_set(s as u8)
     }
 }
 
