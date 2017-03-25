@@ -1,6 +1,6 @@
 extern crate nes;
 
-use nes::{Nes, State};
+use nes::{MutMemoryAccess, Nes};
 
 #[test]
 fn abs_x_wrap() {
@@ -98,28 +98,27 @@ fn run_test_rom(path: &str) {
     loop {
         nes.step();
 
-        let state = nes.state();
-        let test_activity = state.memory.read_multi(0x6001, 3);
+        let test_activity = nes.read_multi(0x6001, 3);
 
         if &[0xDEu8, 0xB0, 0x61] == test_activity.as_slice() {
-            match state.memory.read(0x6000u16) {
+            match nes.read(0x6000u16) {
                 0x00 => break,
                 0x80 => {}
-                _ => panic!("{}", read_message(&state)),
+                _ => panic!("{}", read_message(&mut nes)),
             }
         }
     }
 }
 
-fn read_message(state: &State) -> String {
+fn read_message(nes: &mut Nes) -> String {
     let mut size = 0;
     for i in 0x6004u16.. {
-        if state.memory.read(i) == 0 {
+        if nes.read(i) == 0 {
             size = i - 0x6004;
             break;
         }
     }
 
-    let bytes = state.memory.read_multi(0x6004, size as usize);
+    let bytes = nes.read_multi(0x6004, size as usize);
     String::from_utf8_lossy(&bytes).into()
 }

@@ -1,11 +1,35 @@
 use mapper::Mapper;
 use ppu::Ppu;
 
-pub struct Ram([u8; 0x2000]);
+pub trait MutMemoryAccess {
+    fn read(&mut self, addr: u16) -> u8;
+
+    fn read_double(&mut self, addr: u16) -> u16 {
+        let lo = self.read(addr) as u16;
+        let hi = self.read(addr + 1) as u16;
+        hi << 8 | lo
+    }
+
+    fn read_double_bug(&mut self, addr: u16) -> u16 {
+        let lo = self.read(addr) as u16;
+        let hi = self.read((addr & 0xff00) |
+                           ((addr as u8).wrapping_add(1)) as u16) as
+                 u16;
+        hi << 8 | lo
+    }
+
+    fn read_multi(&mut self, offset: u16, bytes: usize) -> Vec<u8> {
+        (0..bytes).map(|i| self.read(offset + i as u16)).collect()
+    }
+}
+
+const RAM_SIZE: usize = 0x2000;
+
+pub struct Ram([u8; RAM_SIZE]);
 
 impl Ram {
     pub fn new() -> Self {
-        Ram([0; 0x2000])
+        Ram([0; RAM_SIZE])
     }
 
     pub fn read(&self, addr: u16) -> u8 {
@@ -27,23 +51,13 @@ impl Ram {
     }
 }
 
-pub struct MemoryMap<'a> {
+pub struct MutMemory<'a> {
     pub ram: &'a mut Ram,
     pub mapper: &'a mut Mapper,
     pub ppu: &'a mut Ppu,
 }
 
-impl<'a> MemoryMap<'a> {
-    pub fn read(&self, addr: u16) -> u8 {
-        match addr {
-            0x0000...0x1FFF => self.ram.read(addr),
-            0x2000...0x3FFF => self.ppu.read(addr),
-            0x4000...0x401F => 0xFF, // TODO read from I/O registers
-            0x4020...0xFFFF => self.mapper.read(addr),
-            _ => unreachable!(),
-        }
-    }
-
+impl<'a> MutMemory<'a> {
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000...0x1FFF => self.ram.write(addr, val),
@@ -53,23 +67,17 @@ impl<'a> MemoryMap<'a> {
             _ => unreachable!(),
         }
     }
+}
 
-    pub fn read_double(&self, addr: u16) -> u16 {
-        let lo = self.read(addr) as u16;
-        let hi = self.read(addr + 1) as u16;
-        hi << 8 | lo
-    }
-
-    pub fn read_double_bug(&self, addr: u16) -> u16 {
-        let lo = self.read(addr) as u16;
-        let hi =
-            self.read((addr & 0xff00) |
-                      ((addr as u8).wrapping_add(1)) as u16) as u16;
-        hi << 8 | lo
-    }
-
-    pub fn read_multi(&self, offset: u16, bytes: usize) -> Vec<u8> {
-        (0..bytes).map(|i| self.read(offset + i as u16)).collect()
+impl<'a> MutMemoryAccess for MutMemory<'a> {
+    fn read(&mut self, addr: u16) -> u8 {
+        match addr {
+            0x0000...0x1FFF => self.ram.read(addr),
+            0x2000...0x3FFF => self.ppu.read(addr),
+            0x4000...0x401F => 0xFF, // TODO read from I/O registers
+            0x4020...0xFFFF => self.mapper.read(addr),
+            _ => unreachable!(),
+        }
     }
 }
 

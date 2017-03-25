@@ -1,13 +1,14 @@
 use self::Status::*;
+use bits::BitOps;
 use instruction::AddressingMode;
 use instruction::AddressingMode::*;
 use instruction::Instruction;
 use instruction::Label::*;
-use memory::MemoryMap;
-use bits::BitOps;
+use memory::{MutMemory, MutMemoryAccess};
 
 const BRK_VECTOR: u16 = 0xFFFE;
 
+#[derive(Clone, Copy)]
 pub struct Cpu {
     pub cycles: usize,
     pub pc: u16,
@@ -35,7 +36,7 @@ impl Cpu {
         self.pc = addr;
     }
 
-    pub fn step(&mut self, memory: &mut MemoryMap) {
+    pub fn step(&mut self, memory: &mut MutMemory) {
         let instr = self.fetch(memory);
         let addr = instr.addr;
 
@@ -237,14 +238,14 @@ impl Cpu {
             ASL => self.asl(instr, memory),
             ROR => self.ror(instr, memory),
             ROL => self.rol(instr, memory),
-            INC => self.inc(instr, memory),
+            INC => self.inc(addr, memory),
             DEC => self.dec(instr, memory),
             DCP => {
                 self.dec(instr, memory);
                 self.cmp(instr, memory);
             }
             ISB => {
-                self.inc(instr, memory);
+                self.inc(addr, memory);
                 self.sbc(instr, memory);
             }
             SLO => {
@@ -271,7 +272,7 @@ impl Cpu {
                 self.p.copy(NegativeFlag, CarryFlag);
             }
             ALR => {
-                self.a &= memory.read(instr.addr);
+                self.a &= memory.read(addr);
                 self.p.set_if(CarryFlag, self.a.is_bit_set(0));
 
                 self.a >>= 1;
@@ -287,7 +288,7 @@ impl Cpu {
                 self.p.set_if(OverflowFlag, (c ^ self.a.get_bit(5)) == 1);
             }
             AXS => {
-                let m = memory.read(instr.addr);
+                let m = memory.read(addr);
                 let n = (self.a & self.x).wrapping_sub(m);
 
                 self.p.set_if(CarryFlag, (self.a & self.x) >= m);
@@ -316,7 +317,7 @@ impl Cpu {
         }
     }
 
-    fn php(&mut self, memory: &mut MemoryMap) {
+    fn php(&mut self, memory: &mut MutMemory) {
         let mut p = self.p;
         p.set(BreakCommand);
 
@@ -331,7 +332,7 @@ impl Cpu {
                              instr: Instruction,
                              val: u8,
                              idx: u8,
-                             memory: &mut MemoryMap) {
+                             memory: &mut MutMemory) {
         let addr = if instr.page_crossed {
             instr.addr & ((val as u16) << 8) | (instr.addr & 0x00FF)
         } else {
@@ -342,13 +343,13 @@ impl Cpu {
         memory.write(addr, val & ((orig_addr >> 8) as u8 + 1));
     }
 
-    fn inc(&mut self, i: Instruction, memory: &mut MemoryMap) {
-        let m = memory.read(i.addr).wrapping_add(1);
+    fn inc(&mut self, addr: u16, memory: &mut MutMemory) {
+        let m = memory.read(addr).wrapping_add(1);
         self.p.set_if_zn(m);
-        memory.write(i.addr, m);
+        memory.write(addr, m);
     }
 
-    fn dec(&mut self, i: Instruction, memory: &mut MemoryMap) {
+    fn dec(&mut self, i: Instruction, memory: &mut MutMemory) {
         let m = memory.read(i.addr).wrapping_sub(1);
         self.p.set_if_zn(m);
         memory.write(i.addr, m);
@@ -359,7 +360,7 @@ impl Cpu {
         self.p.set_if_zn(self.x);
     }
 
-    fn cmp(&mut self, i: Instruction, memory: &MemoryMap) {
+    fn cmp(&mut self, i: Instruction, memory: &mut MutMemory) {
         let m = memory.read(i.addr);
         let n = self.a.wrapping_sub(m);
 
@@ -368,7 +369,7 @@ impl Cpu {
         self.p.set_if_zero(n);
     }
 
-    fn sbc(&mut self, i: Instruction, memory: &MemoryMap) {
+    fn sbc(&mut self, i: Instruction, memory: &mut MutMemory) {
         let m = memory.read(i.addr);
         let c = if self.p.is_set(CarryFlag) { 0 } else { 1 };
         let (sub, overflow1) = self.a.overflowing_sub(m);
@@ -383,7 +384,7 @@ impl Cpu {
         self.a = sub;
     }
 
-    fn asl(&mut self, i: Instruction, memory: &mut MemoryMap) {
+    fn asl(&mut self, i: Instruction, memory: &mut MutMemory) {
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a.is_bit_set(7));
             self.a <<= 1;
@@ -397,7 +398,7 @@ impl Cpu {
         }
     }
 
-    fn ror(&mut self, i: Instruction, memory: &mut MemoryMap) {
+    fn ror(&mut self, i: Instruction, memory: &mut MutMemory) {
         if i.mode == Accumulator {
             self.ror_acc();
         } else {
@@ -417,7 +418,7 @@ impl Cpu {
         self.p.set_if_zn(self.a);
     }
 
-    fn rol(&mut self, i: Instruction, memory: &mut MemoryMap) {
+    fn rol(&mut self, i: Instruction, memory: &mut MutMemory) {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
         if i.mode == Accumulator {
@@ -433,22 +434,22 @@ impl Cpu {
         }
     }
 
-    fn ora(&mut self, i: Instruction, memory: &MemoryMap) {
+    fn ora(&mut self, i: Instruction, memory: &mut MutMemory) {
         self.a |= memory.read(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn eor(&mut self, i: Instruction, memory: &MemoryMap) {
+    fn eor(&mut self, i: Instruction, memory: &mut MutMemory) {
         self.a ^= memory.read(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn and(&mut self, i: Instruction, memory: &MemoryMap) {
+    fn and(&mut self, i: Instruction, memory: &mut MutMemory) {
         self.a &= memory.read(i.addr);
         self.p.set_if_zn(self.a);
     }
 
-    fn adc(&mut self, i: Instruction, memory: &MemoryMap) {
+    fn adc(&mut self, i: Instruction, memory: &mut MutMemory) {
         let m = memory.read(i.addr);
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
         let (sum, overflow1) = self.a.overflowing_add(m);
@@ -463,7 +464,7 @@ impl Cpu {
         self.a = sum;
     }
 
-    fn lsr(&mut self, i: Instruction, memory: &mut MemoryMap) {
+    fn lsr(&mut self, i: Instruction, memory: &mut MutMemory) {
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a.is_bit_set(0));
             self.a >>= 1;
@@ -485,7 +486,7 @@ impl Cpu {
         }
     }
 
-    pub fn fetch(&self, memory: &MemoryMap) -> Instruction {
+    pub fn fetch(&self, memory: &mut MutMemory) -> Instruction {
         let op = memory.read(self.pc);
 
         let (label, mode, size, cycles, page_cycles) = match op {
@@ -710,12 +711,16 @@ impl Cpu {
         };
 
         let (addr, page_crossed) = self.addr_from_mode(mode, memory);
+        let args = (memory.read(self.pc + 1), memory.read(self.pc + 2));
+        let read = memory.read(addr);
 
         Instruction {
             mode: mode,
             label: label,
             op: op,
+            args: args,
             addr: addr,
+            read: read,
             size: size,
             cycles: cycles,
             page_crossed: page_crossed,
@@ -725,7 +730,7 @@ impl Cpu {
 
     fn addr_from_mode(&self,
                       mode: AddressingMode,
-                      memory: &MemoryMap)
+                      memory: &mut MutMemory)
                       -> (u16, bool) {
         let addr = match mode {
             Implied | Accumulator => 0,
@@ -762,8 +767,8 @@ impl Cpu {
             }
             IndirectIndexed => {
                 let addr = memory.read(self.pc + 1);
-                memory.read_double_bug(addr as u16)
-                    .wrapping_add(self.y as u16)
+                let indir = memory.read_double_bug(addr as u16);
+                indir.wrapping_add(self.y as u16)
             }
         };
 
@@ -778,12 +783,12 @@ impl Cpu {
         (addr, page_crossed)
     }
 
-    fn push(&mut self, val: u8, memory: &mut MemoryMap) {
+    fn push(&mut self, val: u8, memory: &mut MutMemory) {
         memory.write(0x100 + self.sp as u16, val);
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    fn push_double(&mut self, val: u16, memory: &mut MemoryMap) {
+    fn push_double(&mut self, val: u16, memory: &mut MutMemory) {
         let hi = (val >> 8) as u8;
         let lo = val as u8;
 
@@ -791,19 +796,19 @@ impl Cpu {
         self.push(lo, memory);
     }
 
-    fn pop(&mut self, memory: &MemoryMap) -> u8 {
+    fn pop(&mut self, memory: &mut MutMemory) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         memory.read(0x100 + self.sp as u16)
     }
 
-    fn pop_double(&mut self, memory: &MemoryMap) -> u16 {
+    fn pop_double(&mut self, memory: &mut MutMemory) -> u16 {
         let lo = self.pop(memory) as u16;
         let hi = self.pop(memory) as u16;
 
         hi << 8 | lo
     }
 
-    fn pop_p(&mut self, memory: &MemoryMap) {
+    fn pop_p(&mut self, memory: &mut MutMemory) {
         self.p = self.pop(memory).into();
         self.p.unset(Status::BreakCommand);
         self.p.set(Status::UnusedFlag);
@@ -865,7 +870,7 @@ impl P {
     }
 
     fn set(&mut self, s: Status) {
-        self.0 = self.0.set_bit(s as u8);
+        self.0.set_bit(s as u8);
     }
 
     fn unset(&mut self, s: Status) {

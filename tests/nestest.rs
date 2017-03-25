@@ -18,10 +18,8 @@ fn nestest() {
     println!("");
     for expected_state in expected_states {
         {
-            let state = nes.state();
-            let as_str = format!("{}", state);
-            println!("{}", as_str);
-            assert_eq!(expected_state.unwrap(), as_str);
+            let cpu_state = nes.cpu_state();
+            assert_eq!(expected_state.unwrap(), format!("{}", cpu_state));
         }
 
         nes.step();

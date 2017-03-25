@@ -1,6 +1,6 @@
 use self::AddressingMode::*;
 use self::Label::*;
-use State;
+use Cpu;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AddressingMode {
@@ -25,6 +25,8 @@ pub struct Instruction {
     pub label: Label,
     pub op: u8,
     pub addr: u16,
+    pub args: (u8, u8),
+    pub read: u8,
     pub size: u8,
     pub cycles: u8,
     pub page_cycles: u8,
@@ -32,110 +34,94 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub fn bytecode(&self, s: &State) -> String {
+    pub fn bytecode(&self, cpu: &Cpu) -> String {
         let args = match self.mode {
             Absolute => {
                 format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8)
             }
             Indirect | AbsoluteX | AbsoluteY => {
-                let param = s.memory.read_double(s.pc + 1);
-                format!("{:02X} {:02X}", param as u8, param >> 8 as u8)
+                format!("{:02X} {:02X}", self.args.0, self.args.1)
             }
-            ZeroPageX | ZeroPageY => {
-                let param = s.memory.read(s.pc + 1);
-                format!("{:02X}", param)
+            ZeroPageX | ZeroPageY | IndexedIndirect | IndirectIndexed => {
+                format!("{:02X}", self.args.0)
             }
-            Immediate => format!("{:02X}", s.memory.read(self.addr)),
+            Immediate => format!("{:02X}", self.read),
             Implied | Accumulator => "".into(),
             Relative => {
                 format!("{:02X}",
-                        self.addr.wrapping_sub(s.pc).wrapping_sub(2) as u8)
+                        self.addr.wrapping_sub(cpu.pc).wrapping_sub(2) as u8)
             }
-            IndexedIndirect | IndirectIndexed => {
-                let param = s.memory.read(s.pc + 1);
-                format!("{:02X}", param)
-            }
-            _ => format!("{:02X}", self.addr as u8),
+            ZeroPage => format!("{:02X}", self.addr as u8),
         };
 
         format!("{:02X} {:6}", self.op, args)
     }
 
-    pub fn to_string(&self, s: &State) -> String {
+    pub fn to_string(&self, cpu: &Cpu) -> String {
         let args = match self.mode {
             Absolute => {
                 match self.label {
                     JMP | JSR => format!("${:04X}", self.addr),
-                    _ => {
-                        format!("${:04X} = {:02X}",
-                                self.addr,
-                                s.memory.read(self.addr))
-                    }
+                    _ => format!("${:04X} = {:02X}", self.addr, self.read),
                 }
             }
             AbsoluteX => {
-                let param = s.memory.read_double(s.pc + 1);
                 format!("${:04X},X @ {:04X} = {:02X}",
-                        param,
+                        self.args_u16(),
                         self.addr,
-                        s.memory.read(self.addr))
+                        self.read)
             }
             AbsoluteY => {
-                let param = s.memory.read_double(s.pc + 1);
                 format!("${:04X},Y @ {:04X} = {:02X}",
-                        param,
+                        self.args_u16(),
                         self.addr,
-                        s.memory.read(self.addr))
+                        self.read)
             }
-            Immediate => format!("#${:02X}", s.memory.read(self.addr)),
-            ZeroPage => {
-                format!("${:02X} = {:02X}", self.addr, s.memory.read(self.addr))
-            }
+            Immediate => format!("#${:02X}", self.read),
+            ZeroPage => format!("${:02X} = {:02X}", self.addr, self.read),
             ZeroPageX => {
-                let addr = s.memory.read(s.pc + 1);
+                let addr = self.args.0;
                 format!("${:02X},X @ {:02X} = {:02X}",
                         addr,
-                        addr.wrapping_add(s.x),
-                        s.memory.read(self.addr))
+                        addr.wrapping_add(cpu.x),
+                        self.read)
             }
             ZeroPageY => {
-                let addr = s.memory.read(s.pc + 1);
+                let addr = self.args.0;
                 format!("${:02X},Y @ {:02X} = {:02X}",
                         addr,
-                        addr.wrapping_add(s.y),
-                        s.memory.read(self.addr))
+                        addr.wrapping_add(cpu.y),
+                        self.read)
             }
             Relative => format!("${:04X}", self.addr),
             Accumulator => "A".into(),
-            Indirect => {
-                let param = s.memory.read_double(s.pc + 1);
-                let value = s.memory.read_double_bug(param);
-                format!("(${:04X}) = {:04X}", param, value)
-            }
+            Indirect => format!("(${:04X}) = {:04X}", self.args_u16(), self.addr),
             IndexedIndirect => {
-                let param = s.memory.read(s.pc + 1);
-                let indir = param.wrapping_add(s.x);
-                let val = s.memory.read_double_bug(self.addr);
+                let param = self.args.0;
+                let indir = param.wrapping_add(cpu.x);
                 format!("(${:02X},X) @ {:02X} = {:04X} = {:02X}",
                         param,
                         indir,
                         self.addr,
-                        val)
+                        self.read)
             }
             IndirectIndexed => {
-                let param = s.memory.read(s.pc + 1);
-                let indir = s.memory.read_double_bug(param as u16);
-                let val = s.memory.read(indir.wrapping_add(s.y as u16));
+                let param = self.args.0;
+                let indir = self.addr.wrapping_sub(cpu.y as u16);
                 format!("(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
                         param,
                         indir,
                         self.addr,
-                        val)
+                        self.read)
             }
-            _ => "".into(),
+            Implied => "".into(),
         };
 
         format!("{:?} {}", self.label, args)
+    }
+
+    fn args_u16(&self) -> u16 {
+        (self.args.1 as u16) << 8 | self.args.0 as u16
     }
 }
 

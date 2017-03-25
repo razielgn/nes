@@ -14,7 +14,7 @@ mod rom;
 pub use cpu::Cpu;
 use instruction::Instruction;
 use mapper::Mapper;
-use memory::{MemoryMap, Ram};
+pub use memory::{MutMemory, MutMemoryAccess, Ram};
 use ppu::Ppu;
 pub use rom::Rom;
 use std::fmt;
@@ -30,7 +30,7 @@ pub struct Nes {
 impl Nes {
     pub fn from_rom<P: AsRef<Path>>(path: P) -> Self {
         let rom = Rom::from_path(path);
-        let mapper = Mapper::new(rom);
+        let mut mapper = Mapper::new(rom);
         let pc = mapper.read_double(0xFFFC);
 
         Nes {
@@ -41,28 +41,23 @@ impl Nes {
         }
     }
 
-    pub fn state(&mut self) -> State {
-        let mmap = MemoryMap {
+    pub fn cpu_state(&mut self) -> CpuState {
+        let mut mmap = MutMemory {
             ram: &mut self.ram,
             mapper: &mut self.mapper,
             ppu: &mut self.ppu,
         };
 
-        State {
-            pc: self.cpu.pc,
-            a: self.cpu.a,
-            x: self.cpu.x,
-            y: self.cpu.y,
-            p: self.cpu.p.into(),
-            sp: self.cpu.sp,
-            cycles: self.cpu.cycles,
-            instr: self.cpu.fetch(&mmap),
-            memory: mmap,
+        let instr = self.cpu.fetch(&mut mmap);
+
+        CpuState {
+            instr: instr,
+            cpu: self.cpu,
         }
     }
 
     pub fn step(&mut self) {
-        let mut mmap = MemoryMap {
+        let mut mmap = MutMemory {
             ram: &mut self.ram,
             mapper: &mut self.mapper,
             ppu: &mut self.ppu,
@@ -76,31 +71,38 @@ impl Nes {
     }
 }
 
-pub struct State<'a> {
-    pub pc: u16,
-    pub a: u8,
-    pub x: u8,
-    pub y: u8,
-    pub p: u8,
-    pub sp: u8,
-    pub cycles: usize,
-    pub instr: Instruction,
-    pub memory: MemoryMap<'a>,
+impl MutMemoryAccess for Nes {
+    fn read(&mut self, addr: u16) -> u8 {
+        let mut mmap = MutMemory {
+            ram: &mut self.ram,
+            mapper: &mut self.mapper,
+            ppu: &mut self.ppu,
+        };
+
+        mmap.read(addr)
+    }
 }
 
-impl<'a> fmt::Display for State<'a> {
+pub struct CpuState {
+    instr: Instruction,
+    cpu: Cpu,
+}
+
+impl fmt::Display for CpuState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let p: u8 = self.cpu.p.into();
+
         write!(f,
                "{pc:04X}  {bytecode:9} {instr:31} A:{a:02X} X:{x:02X} \
                 Y:{y:02X} P:{p:02X} SP:{sp:2X} CYC:{cyc:3?}",
-               pc = self.pc,
-               bytecode = self.instr.bytecode(&self),
-               instr = self.instr.to_string(&self),
-               a = self.a,
-               x = self.x,
-               y = self.y,
-               p = self.p,
-               sp = self.sp,
-               cyc = (self.cycles * 3) % 341)
+               pc = self.cpu.pc,
+               bytecode = self.instr.bytecode(&self.cpu),
+               instr = self.instr.to_string(&self.cpu),
+               a = self.cpu.a,
+               x = self.cpu.x,
+               y = self.cpu.y,
+               p = p,
+               sp = self.cpu.sp,
+               cyc = (self.cpu.cycles * 3) % 341)
     }
 }
