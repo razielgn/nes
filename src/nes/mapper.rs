@@ -1,4 +1,3 @@
-
 use memory::MutMemoryAccess;
 use rom::Rom;
 

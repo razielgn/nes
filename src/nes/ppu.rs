@@ -1,14 +1,14 @@
 use self::MasterSlaveSelect::*;
 use self::SpriteSize::*;
 use self::VRamAddrIncr::*;
-use bits::BitOps;
+use bits::{BitOps, HighLowBits};
 
 pub struct Ppu {
     control: u8,
     mask: u8,
-    spr_ram_addr: usize,
+    spr_ram_addr: u16,
     spr_ram: [u8; 0xFF],
-    vram_addr: usize,
+    vram_addr: u16,
     vram: [u8; 0xFFFF],
     sprite_overflow: bool,
     sprite_zero_hit: bool,
@@ -35,12 +35,12 @@ impl Ppu {
             0x2000 => self.control,
             0x2001 => self.mask,
             0x2002 => self.status(),
-            0x2003 => self.spr_ram_addr as u8,
-            0x2004 => self.spr_ram[self.spr_ram_addr],
-            0x2005 => (self.vram_addr >> 8) as u8,
-            0x2006 => self.vram_addr as u8,
-            0x2007 => self.vram[self.vram_addr],
-            _ => panic!("Unhandled PPU read at addr {:04X}", addr),
+            0x2003 => self.spr_ram_addr.low(),
+            0x2004 => self.spr_ram[self.spr_ram_addr as usize],
+            0x2005 => self.vram_addr.high(),
+            0x2006 => self.vram_addr.low(),
+            0x2007 => self.vram[self.vram_addr as usize],
+            _ => unreachable!(),
         }
     }
 
@@ -49,11 +49,11 @@ impl Ppu {
             0x2000 => self.control = val,
             0x2001 => self.mask = val,
             0x2002 => (),
-            0x2003 => self.spr_ram_addr = val as usize,
-            0x2004 => self.spr_ram[self.spr_ram_addr] = val,
-            0x2005 => self.vram_addr |= (val as usize) << 8,
-            0x2006 => self.vram_addr |= val as usize,
-            0x2007 => self.vram[self.vram_addr] = val,
+            0x2003 => self.spr_ram_addr.set_low(val),
+            0x2004 => self.spr_ram[self.spr_ram_addr as usize] = val,
+            0x2005 => self.vram_addr.set_high(val),
+            0x2006 => self.vram_addr.set_low(val),
+            0x2007 => self.vram[self.vram_addr as usize] = val,
             _ => unreachable!(),
         }
     }

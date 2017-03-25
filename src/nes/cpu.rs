@@ -1,5 +1,5 @@
 use self::Status::*;
-use bits::BitOps;
+use bits::{BitOps, HighLowBits};
 use instruction::AddressingMode;
 use instruction::AddressingMode::*;
 use instruction::Instruction;
@@ -789,11 +789,8 @@ impl Cpu {
     }
 
     fn push_double(&mut self, val: u16, memory: &mut MutMemory) {
-        let hi = (val >> 8) as u8;
-        let lo = val as u8;
-
-        self.push(hi, memory);
-        self.push(lo, memory);
+        self.push(val.high(), memory);
+        self.push(val.low(), memory);
     }
 
     fn pop(&mut self, memory: &mut MutMemory) -> u8 {
