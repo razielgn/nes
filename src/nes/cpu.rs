@@ -9,6 +9,23 @@ use memory::{MutMemory, MutMemoryAccess};
 const BRK_VECTOR: u16 = 0xFFFE;
 
 #[derive(Clone, Copy)]
+enum Interrupt {
+    Nmi,
+    Irq,
+}
+
+impl Interrupt {
+    pub fn addr(&self) -> u16 {
+        use self::Interrupt::*;
+
+        match *self {
+            Nmi => 0xFFFA,
+            Irq => 0xFFFE,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct Cpu {
     pub cycles: usize,
     pub pc: u16,
@@ -17,6 +34,7 @@ pub struct Cpu {
     pub a: u8,
     pub x: u8,
     pub y: u8,
+    interrupt: Option<Interrupt>,
 }
 
 impl Cpu {
@@ -29,6 +47,7 @@ impl Cpu {
             a: 0,
             x: 0,
             y: 0,
+            interrupt: None,
         }
     }
 
@@ -36,9 +55,24 @@ impl Cpu {
         self.pc = addr;
     }
 
-    pub fn step(&mut self, memory: &mut MutMemory) {
+    fn interrupt(&mut self, memory: &mut MutMemory, interrupt: Interrupt) {
+        let pc = self.pc;
+        self.push_double(pc, memory);
+        self.php(memory);
+        self.pc = memory.read_double(interrupt.addr());
+        self.p.set(InterruptDisable);
+        self.cycles += 7;
+    }
+
+    pub fn step(&mut self, memory: &mut MutMemory) -> usize {
+        self.interrupt.map(|int| {
+            self.interrupt(memory, int);
+            self.interrupt = None;
+        });
+
         let instr = self.fetch(memory);
         let addr = instr.addr;
+        let cycles = self.cycles;
 
         self.pc += instr.size as u16;
         self.cycles += instr.cycles as usize;
@@ -315,6 +349,12 @@ impl Cpu {
             }
             _ => panic!("can't execute {:?}", instr),
         }
+
+        self.cycles - cycles
+    }
+
+    pub fn trigger_nmi(&mut self) {
+        self.interrupt = Some(Interrupt::Nmi);
     }
 
     fn php(&mut self, memory: &mut MutMemory) {
