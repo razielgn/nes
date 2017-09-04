@@ -47,10 +47,10 @@ impl Instruction {
             }
             Immediate => format!("{:02X}", self.read),
             Implied | Accumulator => "".into(),
-            Relative => {
-                format!("{:02X}",
-                        self.addr.wrapping_sub(cpu.pc).wrapping_sub(2) as u8)
-            }
+            Relative => format!(
+                "{:02X}",
+                self.addr.wrapping_sub(cpu.pc).wrapping_sub(2) as u8
+            ),
             ZeroPage => format!("{:02X}", self.addr as u8),
         };
 
@@ -59,39 +59,41 @@ impl Instruction {
 
     pub fn to_string(&self, cpu: &Cpu) -> String {
         let args = match self.mode {
-            Absolute => {
-                match self.label {
-                    JMP | JSR => format!("${:04X}", self.addr),
-                    _ => format!("${:04X} = {:02X}", self.addr, self.read),
-                }
-            }
-            AbsoluteX => {
-                format!("${:04X},X @ {:04X} = {:02X}",
-                        self.args_u16(),
-                        self.addr,
-                        self.read)
-            }
-            AbsoluteY => {
-                format!("${:04X},Y @ {:04X} = {:02X}",
-                        self.args_u16(),
-                        self.addr,
-                        self.read)
-            }
+            Absolute => match self.label {
+                JMP | JSR => format!("${:04X}", self.addr),
+                _ => format!("${:04X} = {:02X}", self.addr, self.read),
+            },
+            AbsoluteX => format!(
+                "${:04X},X @ {:04X} = {:02X}",
+                self.args_u16(),
+                self.addr,
+                self.read
+            ),
+            AbsoluteY => format!(
+                "${:04X},Y @ {:04X} = {:02X}",
+                self.args_u16(),
+                self.addr,
+                self.read
+            ),
             Immediate => format!("#${:02X}", self.read),
             ZeroPage => format!("${:02X} = {:02X}", self.addr, self.read),
             ZeroPageX => {
                 let addr = self.args.0;
-                format!("${:02X},X @ {:02X} = {:02X}",
-                        addr,
-                        addr.wrapping_add(cpu.x),
-                        self.read)
+                format!(
+                    "${:02X},X @ {:02X} = {:02X}",
+                    addr,
+                    addr.wrapping_add(cpu.x),
+                    self.read
+                )
             }
             ZeroPageY => {
                 let addr = self.args.0;
-                format!("${:02X},Y @ {:02X} = {:02X}",
-                        addr,
-                        addr.wrapping_add(cpu.y),
-                        self.read)
+                format!(
+                    "${:02X},Y @ {:02X} = {:02X}",
+                    addr,
+                    addr.wrapping_add(cpu.y),
+                    self.read
+                )
             }
             Relative => format!("${:04X}", self.addr),
             Accumulator => "A".into(),
@@ -99,20 +101,24 @@ impl Instruction {
             IndexedIndirect => {
                 let param = self.args.0;
                 let indir = param.wrapping_add(cpu.x);
-                format!("(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                        param,
-                        indir,
-                        self.addr,
-                        self.read)
+                format!(
+                    "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
+                    param,
+                    indir,
+                    self.addr,
+                    self.read
+                )
             }
             IndirectIndexed => {
                 let param = self.args.0;
                 let indir = self.addr.wrapping_sub(cpu.y as u16);
-                format!("(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                        param,
-                        indir,
-                        self.addr,
-                        self.read)
+                format!(
+                    "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
+                    param,
+                    indir,
+                    self.addr,
+                    self.read
+                )
             }
             Implied => "".into(),
         };

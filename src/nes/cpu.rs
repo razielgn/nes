@@ -158,54 +158,38 @@ impl Cpu {
             CLV => {
                 self.p.unset(OverflowFlag);
             }
-            BCS => {
-                if self.p.is_set(CarryFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BCC => {
-                if !self.p.is_set(CarryFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BEQ => {
-                if self.p.is_set(ZeroFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BNE => {
-                if !self.p.is_set(ZeroFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BVS => {
-                if self.p.is_set(OverflowFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BVC => {
-                if !self.p.is_set(OverflowFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BMI => {
-                if self.p.is_set(NegativeFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
-            BPL => {
-                if !self.p.is_set(NegativeFlag) {
-                    self.add_branching_cycles(addr);
-                    self.jump(addr);
-                }
-            }
+            BCS => if self.p.is_set(CarryFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BCC => if !self.p.is_set(CarryFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BEQ => if self.p.is_set(ZeroFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BNE => if !self.p.is_set(ZeroFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BVS => if self.p.is_set(OverflowFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BVC => if !self.p.is_set(OverflowFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BMI => if self.p.is_set(NegativeFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
+            BPL => if !self.p.is_set(NegativeFlag) {
+                self.add_branching_cycles(addr);
+                self.jump(addr);
+            },
             BIT => {
                 let m = memory.read(addr);
                 let res = self.a & m;
@@ -368,11 +352,13 @@ impl Cpu {
         self.p.set(InterruptDisable);
     }
 
-    fn strange_address_write(&mut self,
-                             instr: Instruction,
-                             val: u8,
-                             idx: u8,
-                             memory: &mut MutMemory) {
+    fn strange_address_write(
+        &mut self,
+        instr: Instruction,
+        val: u8,
+        idx: u8,
+        memory: &mut MutMemory,
+    ) {
         let addr = if instr.page_crossed {
             instr.addr & ((val as u16) << 8) | (instr.addr & 0x00FF)
         } else {
@@ -417,8 +403,10 @@ impl Cpu {
         let overflow = overflow1 || overflow2;
 
         self.p.unset_if(CarryFlag, overflow);
-        self.p.set_if(OverflowFlag,
-                      (self.a ^ sub) & 0x80 != 0 && (self.a ^ m) & 0x80 != 0);
+        self.p.set_if(
+            OverflowFlag,
+            (self.a ^ sub) & 0x80 != 0 && (self.a ^ m) & 0x80 != 0,
+        );
         self.p.set_if_zn(sub);
 
         self.a = sub;
@@ -497,8 +485,10 @@ impl Cpu {
         let overflow = overflow1 || overflow2;
 
         self.p.set_if(CarryFlag, overflow);
-        self.p.set_if(OverflowFlag,
-                      (self.a ^ sum) & 0x80 != 0 && (self.a ^ m) & 0x80 == 0);
+        self.p.set_if(
+            OverflowFlag,
+            (self.a ^ sum) & 0x80 != 0 && (self.a ^ m) & 0x80 == 0,
+        );
         self.p.set_if_zn(sum);
 
         self.a = sum;
@@ -768,10 +758,11 @@ impl Cpu {
         }
     }
 
-    fn addr_from_mode(&self,
-                      mode: AddressingMode,
-                      memory: &mut MutMemory)
-                      -> (u16, bool) {
+    fn addr_from_mode(
+        &self,
+        mode: AddressingMode,
+        memory: &mut MutMemory,
+    ) -> (u16, bool) {
         let addr = match mode {
             Implied | Accumulator => 0,
             Immediate => self.pc + 1,
@@ -933,7 +924,7 @@ impl Into<u8> for P {
 
 #[cfg(test)]
 mod test {
-    use super::{P, Status};
+    use super::{Status, P};
 
     #[test]
     fn bit_ops_on_p() {

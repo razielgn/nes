@@ -28,7 +28,7 @@ impl Ppu {
             0x2000 => self.control.as_u8(),
             0x2001 => self.mask.as_u8(),
             0x2002 => self.status(),
-            _      => 0,
+            _ => 0,
         }
     }
 
@@ -36,7 +36,7 @@ impl Ppu {
         match 0x2000 + (addr % 8) {
             0x2000 => self.control.set(val),
             0x2001 => self.mask.set(val),
-            _      => (),
+            _ => (),
         }
     }
 
@@ -61,7 +61,7 @@ impl Ppu {
                 if self.control.nmi_at_next_vblank() {
                     nim = true;
                 }
-            },
+            }
             (1, 261) => self.vblank = false,
             _ => (),
         }
@@ -87,11 +87,17 @@ impl Ppu {
 struct Control(u8);
 
 impl Control {
-    pub fn new() -> Self { Control(0) }
+    pub fn new() -> Self {
+        Control(0)
+    }
 
-    pub fn set(&mut self, v: u8) { self.0 = v; }
+    pub fn set(&mut self, v: u8) {
+        self.0 = v;
+    }
 
-    pub fn as_u8(&self) -> u8 { self.0 }
+    pub fn as_u8(&self) -> u8 {
+        self.0
+    }
 
     pub fn base_nametable_addr(&self) -> u16 {
         match self.0 & 3 {
@@ -152,11 +158,17 @@ impl Control {
 struct Mask(u8);
 
 impl Mask {
-    pub fn new() -> Self { Mask(0) }
+    pub fn new() -> Self {
+        Mask(0)
+    }
 
-    pub fn set(&mut self, v: u8) { self.0 = v; }
+    pub fn set(&mut self, v: u8) {
+        self.0 = v;
+    }
 
-    pub fn as_u8(&self) -> u8 { self.0 }
+    pub fn as_u8(&self) -> u8 {
+        self.0
+    }
 
     pub fn grayscale(&self) -> bool {
         self.0.is_bit_set(0)
@@ -304,7 +316,9 @@ mod tests {
         let mut ppu = Ppu::new();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..82182 { ppu.step(); }
+        for _ in 0..82182 {
+            ppu.step();
+        }
 
         assert!(ppu.read(0x2002).is_bit_set(7));
         assert!(!ppu.read(0x2002).is_bit_set(7));
@@ -315,7 +329,9 @@ mod tests {
         let mut ppu = Ppu::new();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..89002 { ppu.step(); }
+        for _ in 0..89002 {
+            ppu.step();
+        }
 
         assert!(!ppu.read(0x2002).is_bit_set(7));
     }

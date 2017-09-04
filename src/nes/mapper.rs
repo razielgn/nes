@@ -1,7 +1,7 @@
 use memory::MutMemoryAccess;
 use rom::Rom;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub type SharedMapper = Rc<RefCell<Mapper>>;
 

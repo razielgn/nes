@@ -104,17 +104,19 @@ impl fmt::Display for CpuState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let p: u8 = self.cpu.p.into();
 
-        write!(f,
-               "{pc:04X}  {bytecode:9} {instr:31} A:{a:02X} X:{x:02X} \
-                Y:{y:02X} P:{p:02X} SP:{sp:2X} CYC:{cyc:3?}",
-               pc = self.cpu.pc,
-               bytecode = self.instr.bytecode(&self.cpu),
-               instr = self.instr.to_string(&self.cpu),
-               a = self.cpu.a,
-               x = self.cpu.x,
-               y = self.cpu.y,
-               p = p,
-               sp = self.cpu.sp,
-               cyc = (self.cpu.cycles * 3) % 341)
+        write!(
+            f,
+            "{pc:04X}  {bytecode:9} {instr:31} A:{a:02X} X:{x:02X} \
+             Y:{y:02X} P:{p:02X} SP:{sp:2X} CYC:{cyc:3?}",
+            pc = self.cpu.pc,
+            bytecode = self.instr.bytecode(&self.cpu),
+            instr = self.instr.to_string(&self.cpu),
+            a = self.cpu.a,
+            x = self.cpu.x,
+            y = self.cpu.y,
+            p = p,
+            sp = self.cpu.sp,
+            cyc = (self.cpu.cycles * 3) % 341
+        )
     }
 }

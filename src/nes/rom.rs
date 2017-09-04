@@ -4,11 +4,11 @@ use std::io::Read;
 use std::path::Path;
 
 pub struct Rom {
-    pub flags_6: u8, // TODO
-    pub flags_7: u8, // TODO
+    pub flags_6: u8,      // TODO
+    pub flags_7: u8,      // TODO
     pub size_prg_ram: u8, // TODO
-    pub flags_9: u8, // TODO
-    pub flags_10: u8, // TODO
+    pub flags_9: u8,      // TODO
+    pub flags_10: u8,     // TODO
     pub prg: Vec<u8>,
     pub chr: Vec<u8>,
     pub mapper: u8,

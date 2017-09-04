@@ -12,9 +12,9 @@ pub trait MutMemoryAccess {
 
     fn read_double_bug(&mut self, addr: u16) -> u16 {
         let lo = self.read(addr) as u16;
-        let hi = self.read((addr & 0xff00) |
-                           ((addr as u8).wrapping_add(1)) as u16) as
-                 u16;
+        let hi =
+            self.read((addr & 0xff00) | ((addr as u8).wrapping_add(1)) as u16) as
+                u16;
         hi << 8 | lo
     }
 
@@ -73,7 +73,7 @@ impl<'a> MutMemory<'a> {
         match addr {
             0x0000...0x1FFF => self.ram.write(addr, val),
             0x2000...0x3FFF => self.ppu.write(addr, val),
-            0x4014          => self.dma_transfer(val),
+            0x4014 => self.dma_transfer(val),
             0x4000...0x401F => (), // TODO write to I/O registers
             0x4020...0xFFFF => {
                 let mut mapper = self.mapper.borrow_mut();
@@ -93,7 +93,7 @@ impl<'a> MutMemoryAccess for MutMemory<'a> {
             0x4020...0xFFFF => {
                 let mut mapper = self.mapper.borrow_mut();
                 mapper.read(addr)
-            },
+            }
             _ => unreachable!(),
         }
     }
