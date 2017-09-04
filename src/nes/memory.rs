@@ -1,4 +1,4 @@
-use mapper::Mapper;
+use mapper::SharedMapper;
 use ppu::Ppu;
 
 pub trait MutMemoryAccess {
@@ -53,8 +53,19 @@ impl Ram {
 
 pub struct MutMemory<'a> {
     pub ram: &'a mut Ram,
-    pub mapper: &'a mut Mapper,
+    pub mapper: SharedMapper,
     pub ppu: &'a mut Ppu,
+}
+
+impl<'a> MutMemory<'a> {
+    fn dma_transfer(&mut self, val: u8) {
+        let address = (val as u16) << 8;
+
+        for i in 0..256 {
+            let b = self.read(address + i);
+            self.ppu.write(0x2004, b);
+        }
+    }
 }
 
 impl<'a> MutMemory<'a> {
@@ -62,8 +73,12 @@ impl<'a> MutMemory<'a> {
         match addr {
             0x0000...0x1FFF => self.ram.write(addr, val),
             0x2000...0x3FFF => self.ppu.write(addr, val),
-            0x4000...0x401F => (), // TODO read from I/O registers
-            0x4020...0xFFFF => self.mapper.write(addr, val),
+            0x4014          => self.dma_transfer(val),
+            0x4000...0x401F => (), // TODO write to I/O registers
+            0x4020...0xFFFF => {
+                let mut mapper = self.mapper.borrow_mut();
+                mapper.write(addr, val);
+            }
             _ => unreachable!(),
         }
     }
@@ -75,7 +90,10 @@ impl<'a> MutMemoryAccess for MutMemory<'a> {
             0x0000...0x1FFF => self.ram.read(addr),
             0x2000...0x3FFF => self.ppu.read(addr),
             0x4000...0x401F => 0xFF, // TODO read from I/O registers
-            0x4020...0xFFFF => self.mapper.read(addr),
+            0x4020...0xFFFF => {
+                let mut mapper = self.mapper.borrow_mut();
+                mapper.read(addr)
+            },
             _ => unreachable!(),
         }
     }

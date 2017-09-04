@@ -1,5 +1,9 @@
 use memory::MutMemoryAccess;
 use rom::Rom;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+pub type SharedMapper = Rc<RefCell<Mapper>>;
 
 pub struct Mapper {
     rom: Rom,
@@ -18,6 +22,10 @@ impl Mapper {
             bank1: 0,
             bank2: banks.saturating_sub(1),
         }
+    }
+
+    pub fn to_shared(self) -> SharedMapper {
+        Rc::new(RefCell::new(self))
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
@@ -45,7 +53,7 @@ impl MutMemoryAccess for Mapper {
             0xC000...0xFFFF => {
                 self.rom.prg[self.bank2 * 0x4000 + (addr - 0xC000)]
             }
-            _ => unimplemented!(),
+            _ => panic!("attempted to read on mapper at {:04X}", addr),
         }
     }
 }

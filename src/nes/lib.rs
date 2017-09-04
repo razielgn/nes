@@ -13,7 +13,7 @@ mod rom;
 
 pub use cpu::Cpu;
 use instruction::Instruction;
-use mapper::Mapper;
+use mapper::{Mapper, SharedMapper};
 pub use memory::{MutMemory, MutMemoryAccess, Ram};
 use ppu::Ppu;
 pub use rom::Rom;
@@ -22,7 +22,7 @@ use std::path::Path;
 
 pub struct Nes {
     cpu: Cpu,
-    mapper: Mapper,
+    mapper: SharedMapper,
     ppu: Ppu,
     ram: Ram,
 }
@@ -33,9 +33,11 @@ impl Nes {
         let mut mapper = Mapper::new(rom);
         let pc = mapper.read_double(0xFFFC);
 
+        let shared_mapper = mapper.to_shared();
+
         Nes {
             cpu: Cpu::new(pc),
-            mapper: mapper,
+            mapper: shared_mapper,
             ppu: Ppu::new(),
             ram: Ram::new(),
         }
@@ -44,7 +46,7 @@ impl Nes {
     pub fn cpu_state(&mut self) -> CpuState {
         let mut mmap = MutMemory {
             ram: &mut self.ram,
-            mapper: &mut self.mapper,
+            mapper: self.mapper.clone(),
             ppu: &mut self.ppu,
         };
 
@@ -57,13 +59,23 @@ impl Nes {
     }
 
     pub fn step(&mut self) {
-        let mut mmap = MutMemory {
-            ram: &mut self.ram,
-            mapper: &mut self.mapper,
-            ppu: &mut self.ppu,
+        let cycles = {
+            let mut mmap = MutMemory {
+                ram: &mut self.ram,
+                mapper: self.mapper.clone(),
+                ppu: &mut self.ppu,
+            };
+
+            self.cpu.step(&mut mmap)
         };
 
-        self.cpu.step(&mut mmap);
+        for _ in 0..cycles * 3 {
+            let nmi_triggered = self.ppu.step();
+
+            if nmi_triggered {
+                self.cpu.trigger_nmi();
+            }
+        }
     }
 
     pub fn set_pc(&mut self, pc: u16) {
@@ -75,7 +87,7 @@ impl MutMemoryAccess for Nes {
     fn read(&mut self, addr: u16) -> u8 {
         let mut mmap = MutMemory {
             ram: &mut self.ram,
-            mapper: &mut self.mapper,
+            mapper: self.mapper.clone(),
             ppu: &mut self.ppu,
         };
 
@@ -84,8 +96,8 @@ impl MutMemoryAccess for Nes {
 }
 
 pub struct CpuState {
-    instr: Instruction,
-    cpu: Cpu,
+    pub instr: Instruction,
+    pub cpu: Cpu,
 }
 
 impl fmt::Display for CpuState {

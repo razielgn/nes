@@ -1,81 +1,100 @@
 use self::MasterSlaveSelect::*;
 use self::SpriteSize::*;
 use self::VRamAddrIncr::*;
-use bits::{BitOps, HighLowBits};
+use bits::BitOps;
 
+#[derive(Debug)]
 pub struct Ppu {
-    control: u8,
-    mask: u8,
-    spr_ram_addr: u16,
-    spr_ram: [u8; 0xFF],
-    vram_addr: u16,
-    vram: [u8; 0xFFFF],
-    sprite_overflow: bool,
-    sprite_zero_hit: bool,
-    nmi_occurred: bool,
+    control: Control,
+    mask: Mask,
+    cycle: usize,
+    scanline: usize,
+    vblank: bool,
 }
 
 impl Ppu {
     pub fn new() -> Self {
         Ppu {
-            control: 0,
-            mask: 0,
-            spr_ram_addr: 0,
-            spr_ram: [0; 0xFF],
-            vram_addr: 0x0000,
-            vram: [0; 0xFFFF],
-            sprite_overflow: false,
-            sprite_zero_hit: false,
-            nmi_occurred: false,
+            control: Control::new(),
+            mask: Mask::new(),
+            cycle: 0,
+            scanline: 0,
+            vblank: false,
         }
     }
 
     pub fn read(&mut self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
-            0x2000 => self.control,
-            0x2001 => self.mask,
+            0x2000 => self.control.as_u8(),
+            0x2001 => self.mask.as_u8(),
             0x2002 => self.status(),
-            0x2003 => self.spr_ram_addr.low(),
-            0x2004 => self.spr_ram[self.spr_ram_addr as usize],
-            0x2005 => self.vram_addr.high(),
-            0x2006 => self.vram_addr.low(),
-            0x2007 => self.vram[self.vram_addr as usize],
-            _ => unreachable!(),
+            _      => 0,
         }
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
         match 0x2000 + (addr % 8) {
-            0x2000 => self.control = val,
-            0x2001 => self.mask = val,
-            0x2002 => (),
-            0x2003 => self.spr_ram_addr.set_low(val),
-            0x2004 => self.spr_ram[self.spr_ram_addr as usize] = val,
-            0x2005 => self.vram_addr.set_high(val),
-            0x2006 => self.vram_addr.set_low(val),
-            0x2007 => self.vram[self.vram_addr as usize] = val,
-            _ => unreachable!(),
+            0x2000 => self.control.set(val),
+            0x2001 => self.mask.set(val),
+            _      => (),
         }
+    }
+
+    pub fn step(&mut self) -> bool {
+        let mut nim = false;
+
+        self.cycle += 1;
+
+        if self.cycle == 341 {
+            self.cycle = 0;
+            self.scanline += 1;
+
+            if self.scanline == 262 {
+                self.scanline = 0;
+            }
+        }
+
+        match (self.cycle, self.scanline) {
+            (1, 241) => {
+                self.vblank = true;
+
+                if self.control.nmi_at_next_vblank() {
+                    nim = true;
+                }
+            },
+            (1, 261) => self.vblank = false,
+            _ => (),
+        }
+
+        nim
     }
 
     pub fn status(&mut self) -> u8 {
-        let mut status = self.control & 0x1F;
+        let mut status = self.control.as_u8() & 0x1F;
 
-        if self.sprite_overflow {
-            status.set_bit(5);
-        }
-        if self.sprite_zero_hit {
-            status.set_bit(6);
-        }
-        if self.nmi_occurred {
+        if self.vblank {
             status.set_bit(7);
+            self.vblank = false;
         }
+
+        println!("PPU status: {:02X}", status);
 
         status
     }
+}
+
+#[derive(Debug)]
+struct Control(u8);
+
+impl Control {
+    pub fn new() -> Self { Control(0) }
+
+    pub fn set(&mut self, v: u8) { self.0 = v; }
+
+    pub fn as_u8(&self) -> u8 { self.0 }
 
     pub fn base_nametable_addr(&self) -> u16 {
-        match self.control & 3 {
+        match self.0 & 3 {
             0 => 0x2000,
             1 => 0x2400,
             2 => 0x2800,
@@ -85,7 +104,7 @@ impl Ppu {
     }
 
     pub fn vram_addr_incr(&self) -> VRamAddrIncr {
-        if self.control.is_bit_set(2) {
+        if self.0.is_bit_set(2) {
             Add32GoingDown
         } else {
             Add1GoingAcross
@@ -93,7 +112,7 @@ impl Ppu {
     }
 
     pub fn sprite_pattern_table_addr(&self) -> u16 {
-        if self.control.is_bit_set(3) {
+        if self.0.is_bit_set(3) {
             0x1000
         } else {
             0x0000
@@ -101,7 +120,7 @@ impl Ppu {
     }
 
     pub fn background_pattern_table_addr(&self) -> u16 {
-        if self.control.is_bit_set(4) {
+        if self.0.is_bit_set(4) {
             0x1000
         } else {
             0x0000
@@ -109,7 +128,7 @@ impl Ppu {
     }
 
     pub fn sprite_size(&self) -> SpriteSize {
-        if self.control.is_bit_set(5) {
+        if self.0.is_bit_set(5) {
             SixteenBySixteen
         } else {
             EightByEight
@@ -117,7 +136,7 @@ impl Ppu {
     }
 
     pub fn master_slave_select(&self) -> MasterSlaveSelect {
-        if self.control.is_bit_set(6) {
+        if self.0.is_bit_set(6) {
             OutputColorOnExt
         } else {
             ReadBackdropFromExt
@@ -125,39 +144,50 @@ impl Ppu {
     }
 
     pub fn nmi_at_next_vblank(&self) -> bool {
-        self.control.is_bit_set(7)
+        self.0.is_bit_set(7)
     }
+}
+
+#[derive(Debug)]
+struct Mask(u8);
+
+impl Mask {
+    pub fn new() -> Self { Mask(0) }
+
+    pub fn set(&mut self, v: u8) { self.0 = v; }
+
+    pub fn as_u8(&self) -> u8 { self.0 }
 
     pub fn grayscale(&self) -> bool {
-        self.mask.is_bit_set(0)
+        self.0.is_bit_set(0)
     }
 
     pub fn show_background_in_contour(&self) -> bool {
-        self.mask.is_bit_set(1)
+        self.0.is_bit_set(1)
     }
 
     pub fn show_sprites_in_contour(&self) -> bool {
-        self.mask.is_bit_set(2)
+        self.0.is_bit_set(2)
     }
 
     pub fn show_background(&self) -> bool {
-        self.mask.is_bit_set(3)
+        self.0.is_bit_set(3)
     }
 
     pub fn show_sprites(&self) -> bool {
-        self.mask.is_bit_set(4)
+        self.0.is_bit_set(4)
     }
 
     pub fn emphasize_red(&self) -> bool {
-        self.mask.is_bit_set(5)
+        self.0.is_bit_set(5)
     }
 
     pub fn emphasize_green(&self) -> bool {
-        self.mask.is_bit_set(6)
+        self.0.is_bit_set(6)
     }
 
     pub fn emphasize_blue(&self) -> bool {
-        self.mask.is_bit_set(7)
+        self.0.is_bit_set(7)
     }
 }
 
@@ -183,81 +213,110 @@ pub enum MasterSlaveSelect {
 mod tests {
     use super::*;
 
-    #[test]
-    fn name_table_addr() {
-        let mut ppu = Ppu::new();
+    mod control {
+        use super::super::*;
 
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(0x2000, ppu.base_nametable_addr());
-        ppu.write(0x2000, 0b00000001);
-        assert_eq!(0x2400, ppu.base_nametable_addr());
-        ppu.write(0x2000, 0b00000010);
-        assert_eq!(0x2800, ppu.base_nametable_addr());
-        ppu.write(0x2000, 0b00000011);
-        assert_eq!(0x2C00, ppu.base_nametable_addr());
+        #[test]
+        fn name_table_addr() {
+            let mut control = Control::new();
+
+            control.set(0b00000000);
+            assert_eq!(0x2000, control.base_nametable_addr());
+            control.set(0b00000001);
+            assert_eq!(0x2400, control.base_nametable_addr());
+            control.set(0b00000010);
+            assert_eq!(0x2800, control.base_nametable_addr());
+            control.set(0b00000011);
+            assert_eq!(0x2C00, control.base_nametable_addr());
+        }
+
+        #[test]
+        fn vram_addr_incr() {
+            let mut control = Control::new();
+
+            control.set(0b00000000);
+            assert_eq!(Add1GoingAcross, control.vram_addr_incr());
+            control.set(0b00000100);
+            assert_eq!(Add32GoingDown, control.vram_addr_incr());
+        }
+
+        #[test]
+        fn sprite_pattern_table_addr() {
+            let mut control = Control::new();
+            control.set(0b00000000);
+            assert_eq!(0x0000, control.sprite_pattern_table_addr());
+            control.set(0b00001000);
+            assert_eq!(0x1000, control.sprite_pattern_table_addr());
+        }
+
+        #[test]
+        fn background_pattern_table_addr() {
+            let mut control = Control::new();
+            control.set(0b00000000);
+            assert_eq!(0x0000, control.background_pattern_table_addr());
+            control.set(0b00010000);
+            assert_eq!(0x1000, control.background_pattern_table_addr());
+        }
+
+        #[test]
+        fn sprite_size() {
+            let mut control = Control::new();
+            control.set(0b00000000);
+            assert_eq!(EightByEight, control.sprite_size());
+            control.set(0b00100000);
+            assert_eq!(SixteenBySixteen, control.sprite_size());
+        }
+
+        #[test]
+        fn master_slave_select() {
+            let mut control = Control::new();
+            control.set(0b00000000);
+            assert_eq!(ReadBackdropFromExt, control.master_slave_select());
+            control.set(0b01000000);
+            assert_eq!(OutputColorOnExt, control.master_slave_select());
+        }
+
+        #[test]
+        fn nmi_at_next_vblank() {
+            let mut control = Control::new();
+            control.set(0b00000000);
+            assert_eq!(false, control.nmi_at_next_vblank());
+            control.set(0b10000000);
+            assert_eq!(true, control.nmi_at_next_vblank());
+        }
+    }
+
+    mod mask {
+        use super::super::*;
+
+        #[test]
+        fn grayscale() {
+            let mut mask = Mask::new();
+            mask.set(0b00000000);
+            assert_eq!(false, mask.grayscale());
+            mask.set(0b00000001);
+            assert_eq!(true, mask.grayscale());
+        }
     }
 
     #[test]
-    fn vram_addr_incr() {
+    fn vblank_has_started_and_reading_status_resets_it() {
         let mut ppu = Ppu::new();
+        assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(Add1GoingAcross, ppu.vram_addr_incr());
-        ppu.write(0x2000, 0b00000100);
-        assert_eq!(Add32GoingDown, ppu.vram_addr_incr());
+        for _ in 0..82182 { ppu.step(); }
+
+        assert!(ppu.read(0x2002).is_bit_set(7));
+        assert!(!ppu.read(0x2002).is_bit_set(7));
     }
 
     #[test]
-    fn sprite_pattern_table_addr() {
+    fn vblank_has_ended() {
         let mut ppu = Ppu::new();
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(0x0000, ppu.sprite_pattern_table_addr());
-        ppu.write(0x2000, 0b00001000);
-        assert_eq!(0x1000, ppu.sprite_pattern_table_addr());
-    }
+        assert!(!ppu.read(0x2002).is_bit_set(7));
 
-    #[test]
-    fn background_pattern_table_addr() {
-        let mut ppu = Ppu::new();
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(0x0000, ppu.background_pattern_table_addr());
-        ppu.write(0x2000, 0b00010000);
-        assert_eq!(0x1000, ppu.background_pattern_table_addr());
-    }
+        for _ in 0..89002 { ppu.step(); }
 
-    #[test]
-    fn sprite_size() {
-        let mut ppu = Ppu::new();
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(EightByEight, ppu.sprite_size());
-        ppu.write(0x2000, 0b00100000);
-        assert_eq!(SixteenBySixteen, ppu.sprite_size());
-    }
-
-    #[test]
-    fn master_slave_select() {
-        let mut ppu = Ppu::new();
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(ReadBackdropFromExt, ppu.master_slave_select());
-        ppu.write(0x2000, 0b01000000);
-        assert_eq!(OutputColorOnExt, ppu.master_slave_select());
-    }
-
-    #[test]
-    fn nmi_at_next_vblank() {
-        let mut ppu = Ppu::new();
-        ppu.write(0x2000, 0b00000000);
-        assert_eq!(false, ppu.nmi_at_next_vblank());
-        ppu.write(0x2000, 0b10000000);
-        assert_eq!(true, ppu.nmi_at_next_vblank());
-    }
-
-    #[test]
-    fn grayscale() {
-        let mut ppu = Ppu::new();
-        ppu.write(0x2001, 0b00000000);
-        assert_eq!(false, ppu.grayscale());
-        ppu.write(0x2001, 0b00000001);
-        assert_eq!(true, ppu.grayscale());
+        assert!(!ppu.read(0x2002).is_bit_set(7));
     }
 }
