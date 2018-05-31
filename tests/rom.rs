@@ -1,16 +1,10 @@
 extern crate nes;
 
 use nes::Rom;
-use std::fs::File;
-use std::io::Read;
 
 #[test]
 fn nestest_decode() {
-    let mut f = File::open("tests/roms/nestest.nes").unwrap();
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf).unwrap();
-
-    let (_, rom) = Rom::parse(buf.as_slice()).unwrap();
+    let rom = Rom::from_path("tests/roms/nestest.nes");
 
     assert_eq!(0, rom.flags_6);
     assert_eq!(0, rom.flags_7);

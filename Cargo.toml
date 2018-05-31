@@ -16,4 +16,4 @@ doc = false
 test = false
 
 [dependencies]
-nom = "~3.2"
+nom = "4.0"

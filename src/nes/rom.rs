@@ -39,7 +39,7 @@ impl Rom {
             buf
         };
 
-        let (_, rom) = Rom::parse(buf.as_slice()).unwrap();
+        let (_, rom) = Rom::parse(&buf).unwrap();
         rom
     }
 
@@ -55,7 +55,6 @@ impl Rom {
         take!(5) >>
         prg: take!(16_384 * size_prg_rom as usize) >>
         chr: take!(8_192 * size_chr_rom as usize) >>
-        eof!() >>
         ({
             let lo_mapper = flags_6 & 0x0F;
             let hi_mapper = flags_7 & 0x78;
