@@ -36,9 +36,11 @@ pub struct Instruction {
 impl Instruction {
     pub fn bytecode(&self, cpu: &Cpu) -> String {
         let args = match self.mode {
-            Absolute => {
-                format!("{:02X} {:02X}", self.addr as u8, self.addr >> 8 as u8)
-            }
+            Absolute => format!(
+                "{:02X} {:02X}",
+                self.addr as u8,
+                self.addr >> 8 as u8
+            ),
             Indirect | AbsoluteX | AbsoluteY => {
                 format!("{:02X} {:02X}", self.args.0, self.args.1)
             }
@@ -103,10 +105,7 @@ impl Instruction {
                 let indir = param.wrapping_add(cpu.x);
                 format!(
                     "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                    param,
-                    indir,
-                    self.addr,
-                    self.read
+                    param, indir, self.addr, self.read
                 )
             }
             IndirectIndexed => {
@@ -114,10 +113,7 @@ impl Instruction {
                 let indir = self.addr.wrapping_sub(cpu.y as u16);
                 format!(
                     "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                    param,
-                    indir,
-                    self.addr,
-                    self.read
+                    param, indir, self.addr, self.read
                 )
             }
             Implied => "".into(),

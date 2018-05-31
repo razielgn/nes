@@ -303,7 +303,8 @@ impl Cpu {
 
                 let c = self.a.get_bit(6);
                 self.p.set_if(CarryFlag, c == 1);
-                self.p.set_if(OverflowFlag, (c ^ self.a.get_bit(5)) == 1);
+                self.p
+                    .set_if(OverflowFlag, (c ^ self.a.get_bit(5)) == 1);
             }
             AXS => {
                 let m = memory.read(addr);
@@ -397,7 +398,11 @@ impl Cpu {
 
     fn sbc(&mut self, i: Instruction, memory: &mut MutMemory) {
         let m = memory.read(i.addr);
-        let c = if self.p.is_set(CarryFlag) { 0 } else { 1 };
+        let c = if self.p.is_set(CarryFlag) {
+            0
+        } else {
+            1
+        };
         let (sub, overflow1) = self.a.overflowing_sub(m);
         let (sub, overflow2) = sub.overflowing_sub(c);
         let overflow = overflow1 || overflow2;
@@ -430,7 +435,11 @@ impl Cpu {
         if i.mode == Accumulator {
             self.ror_acc();
         } else {
-            let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+            let c = if self.p.is_set(CarryFlag) {
+                1
+            } else {
+                0
+            };
             let mut m = memory.read(i.addr);
             self.p.set_if(CarryFlag, m.is_bit_set(0));
             m = (m >> 1) | (c << 7);
@@ -440,14 +449,22 @@ impl Cpu {
     }
 
     fn ror_acc(&mut self) {
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        let c = if self.p.is_set(CarryFlag) {
+            1
+        } else {
+            0
+        };
         self.p.set_if(CarryFlag, self.a.is_bit_set(0));
         self.a = (self.a >> 1) | (c << 7);
         self.p.set_if_zn(self.a);
     }
 
     fn rol(&mut self, i: Instruction, memory: &mut MutMemory) {
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        let c = if self.p.is_set(CarryFlag) {
+            1
+        } else {
+            0
+        };
 
         if i.mode == Accumulator {
             self.p.set_if(CarryFlag, self.a.is_bit_set(7));
@@ -479,7 +496,11 @@ impl Cpu {
 
     fn adc(&mut self, i: Instruction, memory: &mut MutMemory) {
         let m = memory.read(i.addr);
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        let c = if self.p.is_set(CarryFlag) {
+            1
+        } else {
+            0
+        };
         let (sum, overflow1) = self.a.overflowing_add(m);
         let (sum, overflow2) = sum.overflowing_add(c);
         let overflow = overflow1 || overflow2;
@@ -737,11 +758,17 @@ impl Cpu {
             0xFD => (SBC, AbsoluteX, 3, 4, 1),
             0xFE => (INC, AbsoluteX, 3, 7, 0),
             0xFF => (ISB, AbsoluteX, 3, 6, 1),
-            op => panic!("unknown opcode 0x{:X} at addr {:04X}", op, self.pc),
+            op => panic!(
+                "unknown opcode 0x{:X} at addr {:04X}",
+                op, self.pc
+            ),
         };
 
         let (addr, page_crossed) = self.addr_from_mode(mode, memory);
-        let args = (memory.read(self.pc + 1), memory.read(self.pc + 2));
+        let args = (
+            memory.read(self.pc + 1),
+            memory.read(self.pc + 2),
+        );
         let read = memory.read(addr);
 
         Instruction {
@@ -782,12 +809,12 @@ impl Cpu {
                 }
             }
             Absolute => memory.read_double(self.pc + 1),
-            AbsoluteX => {
-                memory.read_double(self.pc + 1).wrapping_add(self.x as u16)
-            }
-            AbsoluteY => {
-                memory.read_double(self.pc + 1).wrapping_add(self.y as u16)
-            }
+            AbsoluteX => memory
+                .read_double(self.pc + 1)
+                .wrapping_add(self.x as u16),
+            AbsoluteY => memory
+                .read_double(self.pc + 1)
+                .wrapping_add(self.y as u16),
             Indirect => {
                 let addr = memory.read_double(self.pc + 1);
                 memory.read_double_bug(addr)

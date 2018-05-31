@@ -15,8 +15,14 @@ fn nestest_decode() {
     assert_eq!(0, rom.mapper);
 
     assert_eq!(16_384, rom.prg.len());
-    assert_eq!(&b"\x4c\xf5\xc5\x60\x78\xd8\xa2\xff"[..], &rom.prg[0..8]);
+    assert_eq!(
+        &b"\x4c\xf5\xc5\x60\x78\xd8\xa2\xff"[..],
+        &rom.prg[0..8]
+    );
 
     assert_eq!(8_192, rom.chr.len());
-    assert_eq!(&b"\x80\x80\xff\x80\x80\x00\x00\x00"[..], &rom.chr[32..40]);
+    assert_eq!(
+        &b"\x80\x80\xff\x80\x80\x00\x00\x00"[..],
+        &rom.chr[32..40]
+    );
 }

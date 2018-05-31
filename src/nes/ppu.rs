@@ -283,7 +283,10 @@ mod tests {
         fn master_slave_select() {
             let mut control = Control::new();
             control.set(0b00000000);
-            assert_eq!(ReadBackdropFromExt, control.master_slave_select());
+            assert_eq!(
+                ReadBackdropFromExt,
+                control.master_slave_select()
+            );
             control.set(0b01000000);
             assert_eq!(OutputColorOnExt, control.master_slave_select());
         }

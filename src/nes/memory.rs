@@ -12,14 +12,16 @@ pub trait MutMemoryAccess {
 
     fn read_double_bug(&mut self, addr: u16) -> u16 {
         let lo = self.read(addr) as u16;
-        let hi =
-            self.read((addr & 0xff00) | ((addr as u8).wrapping_add(1)) as u16) as
-                u16;
+        let hi = self.read(
+            (addr & 0xff00) | ((addr as u8).wrapping_add(1)) as u16,
+        ) as u16;
         hi << 8 | lo
     }
 
     fn read_multi(&mut self, offset: u16, bytes: usize) -> Vec<u8> {
-        (0..bytes).map(|i| self.read(offset + i as u16)).collect()
+        (0..bytes)
+            .map(|i| self.read(offset + i as u16))
+            .collect()
     }
 }
 
