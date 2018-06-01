@@ -8,7 +8,7 @@ fn main() {
     let mut nes = Nes::from_rom(path);
 
     loop {
-        println!("{}", nes.cpu_state());
-        nes.step();
+        let cpu_state = nes.step();
+        println!("{}", cpu_state);
     }
 }

@@ -64,7 +64,7 @@ impl Cpu {
         self.cycles += 7;
     }
 
-    pub fn step(&mut self, memory: &mut MutMemory) -> usize {
+    pub fn step(&mut self, memory: &mut MutMemory) -> (usize, Instruction) {
         if let Some(int) = self.interrupt {
             self.interrupt(memory, int);
             self.interrupt = None;
@@ -335,7 +335,7 @@ impl Cpu {
             _ => panic!("can't execute {:?}", instr),
         }
 
-        self.cycles - cycles
+        (self.cycles - cycles, instr)
     }
 
     pub fn trigger_nmi(&mut self) {
@@ -769,6 +769,8 @@ impl Cpu {
             memory.read(self.pc + 1),
             memory.read(self.pc + 2),
         );
+
+        // TODO: avoid multiple reads from memory, since reads on PPU change its state.
         let read = memory.read(addr);
 
         Instruction {

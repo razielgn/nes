@@ -41,23 +41,10 @@ impl Nes {
         }
     }
 
-    pub fn cpu_state(&mut self) -> CpuState {
-        let mut mmap = MutMemory {
-            ram: &mut self.ram,
-            mapper: self.mapper.clone(),
-            ppu: &mut self.ppu,
-        };
+    pub fn step(&mut self) -> CpuState {
+        let last_cpu = self.cpu;
 
-        let instr = self.cpu.fetch(&mut mmap);
-
-        CpuState {
-            instr,
-            cpu: self.cpu,
-        }
-    }
-
-    pub fn step(&mut self) {
-        let cycles = {
+        let (cycles, instr) = {
             let mut mmap = MutMemory {
                 ram: &mut self.ram,
                 mapper: self.mapper.clone(),
@@ -73,6 +60,11 @@ impl Nes {
             if nmi_triggered {
                 self.cpu.trigger_nmi();
             }
+        }
+
+        CpuState {
+            instr,
+            cpu: last_cpu,
         }
     }
 
