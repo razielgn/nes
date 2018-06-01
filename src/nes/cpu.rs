@@ -41,7 +41,7 @@ impl Cpu {
     pub fn new(pc: u16) -> Self {
         Cpu {
             cycles: 0,
-            pc: pc,
+            pc,
             sp: 0xFD,
             p: P::new(),
             a: 0,
@@ -65,16 +65,16 @@ impl Cpu {
     }
 
     pub fn step(&mut self, memory: &mut MutMemory) -> usize {
-        self.interrupt.map(|int| {
+        if let Some(int) = self.interrupt {
             self.interrupt(memory, int);
             self.interrupt = None;
-        });
+        }
 
         let instr = self.fetch(memory);
         let addr = instr.addr;
         let cycles = self.cycles;
 
-        self.pc += instr.size as u16;
+        self.pc += u16::from(instr.size);
         self.cycles += instr.cycles as usize;
 
         if instr.page_crossed {
@@ -361,12 +361,12 @@ impl Cpu {
         memory: &mut MutMemory,
     ) {
         let addr = if instr.page_crossed {
-            instr.addr & ((val as u16) << 8) | (instr.addr & 0x00FF)
+            instr.addr & (u16::from(val) << 8) | (instr.addr & 0x00FF)
         } else {
             instr.addr
         };
 
-        let orig_addr = instr.addr.wrapping_sub(idx as u16);
+        let orig_addr = instr.addr.wrapping_sub(u16::from(idx));
         memory.write(addr, val & ((orig_addr >> 8) as u8 + 1));
     }
 
@@ -772,16 +772,16 @@ impl Cpu {
         let read = memory.read(addr);
 
         Instruction {
-            mode: mode,
-            label: label,
-            op: op,
-            args: args,
-            addr: addr,
-            read: read,
-            size: size,
-            cycles: cycles,
-            page_crossed: page_crossed,
-            page_cycles: page_cycles,
+            mode,
+            label,
+            op,
+            args,
+            addr,
+            read,
+            size,
+            cycles,
+            page_crossed,
+            page_cycles,
         }
     }
 
@@ -793,11 +793,11 @@ impl Cpu {
         let addr = match mode {
             Implied | Accumulator => 0,
             Immediate => self.pc + 1,
-            ZeroPage => memory.read(self.pc + 1) as u16,
-            ZeroPageX => memory.read(self.pc + 1).wrapping_add(self.x) as u16,
-            ZeroPageY => memory.read(self.pc + 1).wrapping_add(self.y) as u16,
+            ZeroPage => u16::from(memory.read(self.pc + 1)),
+            ZeroPageX => u16::from(memory.read(self.pc + 1).wrapping_add(self.x)),
+            ZeroPageY => u16::from(memory.read(self.pc + 1).wrapping_add(self.y)),
             Relative => {
-                let offset = memory.read(self.pc + 1) as u16;
+                let offset = u16::from(memory.read(self.pc + 1));
 
                 if offset < 0x80 {
                     self.pc.wrapping_add(2).wrapping_add(offset)
@@ -811,29 +811,29 @@ impl Cpu {
             Absolute => memory.read_double(self.pc + 1),
             AbsoluteX => memory
                 .read_double(self.pc + 1)
-                .wrapping_add(self.x as u16),
+                .wrapping_add(u16::from(self.x)),
             AbsoluteY => memory
                 .read_double(self.pc + 1)
-                .wrapping_add(self.y as u16),
+                .wrapping_add(u16::from(self.y)),
             Indirect => {
                 let addr = memory.read_double(self.pc + 1);
                 memory.read_double_bug(addr)
             }
             IndexedIndirect => {
                 let addr = memory.read(self.pc + 1).wrapping_add(self.x);
-                memory.read_double_bug(addr as u16)
+                memory.read_double_bug(u16::from(addr))
             }
             IndirectIndexed => {
                 let addr = memory.read(self.pc + 1);
-                let indir = memory.read_double_bug(addr as u16);
-                indir.wrapping_add(self.y as u16)
+                let indir = memory.read_double_bug(u16::from(addr));
+                indir.wrapping_add(u16::from(self.y))
             }
         };
 
         let page_crossed = match mode {
-            AbsoluteX => pages_differ(addr.wrapping_sub(self.x as u16), addr),
+            AbsoluteX => pages_differ(addr.wrapping_sub(u16::from(self.x)), addr),
             AbsoluteY | IndirectIndexed => {
-                pages_differ(addr.wrapping_sub(self.y as u16), addr)
+                pages_differ(addr.wrapping_sub(u16::from(self.y)), addr)
             }
             _ => false,
         };
@@ -842,7 +842,7 @@ impl Cpu {
     }
 
     fn push(&mut self, val: u8, memory: &mut MutMemory) {
-        memory.write(0x100 + self.sp as u16, val);
+        memory.write(0x100 + u16::from(self.sp), val);
         self.sp = self.sp.wrapping_sub(1);
     }
 
@@ -853,12 +853,12 @@ impl Cpu {
 
     fn pop(&mut self, memory: &mut MutMemory) -> u8 {
         self.sp = self.sp.wrapping_add(1);
-        memory.read(0x100 + self.sp as u16)
+        memory.read(0x100 + u16::from(self.sp))
     }
 
     fn pop_double(&mut self, memory: &mut MutMemory) -> u16 {
-        let lo = self.pop(memory) as u16;
-        let hi = self.pop(memory) as u16;
+        let lo = u16::from(self.pop(memory));
+        let hi = u16::from(self.pop(memory));
 
         hi << 8 | lo
     }

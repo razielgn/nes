@@ -5,16 +5,16 @@ pub trait MutMemoryAccess {
     fn read(&mut self, addr: u16) -> u8;
 
     fn read_double(&mut self, addr: u16) -> u16 {
-        let lo = self.read(addr) as u16;
-        let hi = self.read(addr + 1) as u16;
+        let lo = u16::from(self.read(addr));
+        let hi = u16::from(self.read(addr + 1));
         hi << 8 | lo
     }
 
     fn read_double_bug(&mut self, addr: u16) -> u16 {
-        let lo = self.read(addr) as u16;
-        let hi = self.read(
-            (addr & 0xff00) | ((addr as u8).wrapping_add(1)) as u16,
-        ) as u16;
+        let lo = u16::from(self.read(addr));
+        let hi = u16::from(self.read(
+            (addr & 0xff00) | u16::from((addr as u8).wrapping_add(1)),
+        ));
         hi << 8 | lo
     }
 
@@ -61,7 +61,7 @@ pub struct MutMemory<'a> {
 
 impl<'a> MutMemory<'a> {
     fn dma_transfer(&mut self, val: u8) {
-        let address = (val as u16) << 8;
+        let address = u16::from(val) << 8;
 
         for i in 0..256 {
             let b = self.read(address + i);
@@ -75,8 +75,9 @@ impl<'a> MutMemory<'a> {
         match addr {
             0x0000...0x1FFF => self.ram.write(addr, val),
             0x2000...0x3FFF => self.ppu.write(addr, val),
+            0x4000...0x4013 => (),
             0x4014 => self.dma_transfer(val),
-            0x4000...0x401F => (), // TODO write to I/O registers
+            0x4015...0x401F => (), // TODO write to I/O registers
             0x4020...0xFFFF => {
                 let mut mapper = self.mapper.borrow_mut();
                 mapper.write(addr, val);

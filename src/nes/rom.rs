@@ -60,11 +60,11 @@ impl Rom {
             let hi_mapper = flags_7 & 0x78;
 
             Rom {
-                flags_6: flags_6,
-                flags_7: flags_7,
+                flags_6,
+                flags_7,
                 size_prg_ram: if size_prg_ram == 0 { 1 } else { size_prg_ram },
-                flags_9: flags_7,
-                flags_10: flags_10,
+                flags_9,
+                flags_10,
                 prg: prg.to_vec(),
                 chr: chr.to_vec(),
                 mapper: lo_mapper | hi_mapper,

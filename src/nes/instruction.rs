@@ -110,7 +110,7 @@ impl Instruction {
             }
             IndirectIndexed => {
                 let param = self.args.0;
-                let indir = self.addr.wrapping_sub(cpu.y as u16);
+                let indir = self.addr.wrapping_sub(u16::from(cpu.y));
                 format!(
                     "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
                     param, indir, self.addr, self.read
@@ -123,7 +123,7 @@ impl Instruction {
     }
 
     fn args_u16(&self) -> u16 {
-        (self.args.1 as u16) << 8 | self.args.0 as u16
+        u16::from(self.args.1) << 8 | u16::from(self.args.0)
     }
 }
 

@@ -35,10 +35,10 @@ impl HighLowBits for u16 {
     }
 
     fn set_high(&mut self, byte: u8) {
-        *self |= (byte as u16) << 8;
+        *self |= u16::from(byte) << 8;
     }
 
     fn set_low(&mut self, byte: u8) {
-        *self |= byte as u16;
+        *self |= u16::from(byte);
     }
 }

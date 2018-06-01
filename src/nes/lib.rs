@@ -33,11 +33,9 @@ impl Nes {
         let mut mapper = Mapper::new(rom);
         let pc = mapper.read_double(0xFFFC);
 
-        let shared_mapper = mapper.to_shared();
-
         Nes {
             cpu: Cpu::new(pc),
-            mapper: shared_mapper,
+            mapper: mapper.into_shared(),
             ppu: Ppu::new(),
             ram: Ram::new(),
         }
@@ -53,7 +51,7 @@ impl Nes {
         let instr = self.cpu.fetch(&mut mmap);
 
         CpuState {
-            instr: instr,
+            instr,
             cpu: self.cpu,
         }
     }

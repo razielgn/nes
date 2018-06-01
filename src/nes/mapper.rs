@@ -17,14 +17,14 @@ impl Mapper {
         let banks = rom.prg.len() / 0x4000;
 
         Mapper {
-            rom: rom,
-            banks: banks,
+            rom,
+            banks,
             bank1: 0,
             bank2: banks.saturating_sub(1),
         }
     }
 
-    pub fn to_shared(self) -> SharedMapper {
+    pub fn into_shared(self) -> SharedMapper {
         Rc::new(RefCell::new(self))
     }
 
