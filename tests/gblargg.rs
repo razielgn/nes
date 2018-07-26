@@ -399,6 +399,16 @@ mod cpu_reset {
     }
 }
 
+mod vbl_nmi_timing {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn frame_basics() {
+        run_test_rom("frame_basics");
+    }
+}
+
 fn run_test_rom(name: &str) {
     let mut nes = Nes::from_rom(format!("tests/roms/{}.nes", name));
 
