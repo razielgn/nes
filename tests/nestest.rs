@@ -14,9 +14,6 @@ fn nestest() {
 
     for expected_state in reader.lines() {
         let cpu_state = nes.step();
-        assert_eq!(
-            expected_state.unwrap(),
-            format!("{}", cpu_state)
-        );
+        assert_eq!(expected_state.unwrap(), format!("{}", cpu_state));
     }
 }

@@ -19,9 +19,7 @@ pub trait MutMemoryAccess {
     }
 
     fn read_multi(&mut self, offset: u16, bytes: usize) -> Vec<u8> {
-        (0..bytes)
-            .map(|i| self.read(offset + i as u16))
-            .collect()
+        (0..bytes).map(|i| self.read(offset + i as u16)).collect()
     }
 }
 
