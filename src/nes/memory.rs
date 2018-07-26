@@ -89,7 +89,7 @@ impl<'a> MutMemory<'a> {
 
 impl<'a> MutMemoryAccess for MutMemory<'a> {
     fn read(&mut self, addr: u16) -> u8 {
-        match addr {
+        let read = match addr {
             0x0000...0x1FFF => self.ram.read(addr),
             0x2000...0x3FFF => self.ppu.read(addr),
             0x4000...0x401F => 0xFF, // TODO read from I/O registers
@@ -98,7 +98,11 @@ impl<'a> MutMemoryAccess for MutMemory<'a> {
                 mapper.read(addr)
             }
             _ => unreachable!(),
-        }
+        };
+
+        debug!("read {:04x} => {:02x}", addr, read);
+
+        read
     }
 }
 

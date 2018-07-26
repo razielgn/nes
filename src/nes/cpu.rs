@@ -8,7 +8,7 @@ use memory::{MutMemory, MutMemoryAccess};
 
 const BRK_VECTOR: u16 = 0xFFFE;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Interrupt {
     Nmi,
     Irq,
@@ -25,7 +25,7 @@ impl Interrupt {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Cpu {
     pub cycles: usize,
     pub pc: u16,
@@ -65,12 +65,18 @@ impl Cpu {
     }
 
     pub fn step(&mut self, memory: &mut MutMemory) -> (usize, Instruction) {
+        debug!("step");
+
         if let Some(int) = self.interrupt {
+            debug!("handling interrupt {:?}", int);
             self.interrupt(memory, int);
             self.interrupt = None;
         }
 
         let instr = self.fetch(memory);
+        debug!("instruction {:?}", instr);
+        debug!("state {:?}", self);
+
         let addr = instr.addr;
         let cycles = self.cycles;
 

@@ -2,6 +2,8 @@
 
 #[macro_use]
 extern crate nom;
+#[macro_use]
+extern crate log;
 
 mod bits;
 mod cpu;
@@ -42,6 +44,8 @@ impl Nes {
     }
 
     pub fn step(&mut self) -> CpuState {
+        debug!("step");
+
         let last_cpu = self.cpu;
 
         let (cycles, instr) = {

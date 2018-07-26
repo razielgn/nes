@@ -41,6 +41,7 @@ impl Ppu {
     }
 
     pub fn step(&mut self) -> bool {
+        debug!("state {:?}", self);
         let mut nim = false;
 
         self.cycle += 1;
@@ -56,6 +57,7 @@ impl Ppu {
 
         match (self.cycle, self.scanline) {
             (1, 241) => {
+                debug!("vblank starts");
                 self.vblank = true;
 
                 if self.control.nmi_at_next_vblank() {
@@ -75,9 +77,8 @@ impl Ppu {
         if self.vblank {
             status.set_bit(7);
             self.vblank = false;
+            debug!("vblank reset");
         }
-
-        println!("PPU status: {:02X}", status);
 
         status
     }

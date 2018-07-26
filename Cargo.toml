@@ -17,3 +17,8 @@ test = false
 
 [dependencies]
 nom = "4.0"
+log = "0.4"
+env_logger = "*"
+
+[dev-dependencies]
+env_logger = "*"

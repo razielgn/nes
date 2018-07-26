@@ -1,9 +1,12 @@
 extern crate nes;
+extern crate env_logger;
 
 use nes::Nes;
 use std::env;
 
 fn main() {
+    env_logger::init();
+
     let path = env::args().nth(1).unwrap();
     let mut nes = Nes::from_rom(path);
 
