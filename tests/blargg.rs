@@ -328,7 +328,6 @@ mod instr_misc {
     /// STA ABS,X or (ZP),Y
     /// ROL ABS,X always
     #[test]
-    #[ignore]
     fn dummy_reads() {
         run_test_rom("dummy_reads");
     }

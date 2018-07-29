@@ -56,4 +56,8 @@ impl MutMemoryAccess for Mapper {
             _ => panic!("attempted to read on mapper at {:04X}", addr),
         }
     }
+
+    fn write(&mut self, _addr: u16, _val: u8) {
+        panic!("cannot write to mapper");
+    }
 }

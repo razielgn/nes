@@ -1,9 +1,9 @@
 use self::AddressingMode::*;
 use self::Label::*;
-use Cpu;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AddressingMode {
+    None,
     Implied,
     Accumulator,
     Immediate,
@@ -12,123 +12,43 @@ pub enum AddressingMode {
     ZeroPageY,
     Relative,
     Absolute,
-    AbsoluteX,
-    AbsoluteY,
+    AbsoluteX(bool),
+    AbsoluteY(bool),
     Indirect,
     IndexedIndirect,
-    IndirectIndexed,
+    IndirectIndexed(bool),
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Instruction {
-    pub mode: AddressingMode,
-    pub label: Label,
-    pub op: u8,
-    pub addr: u16,
-    pub args: (u8, u8),
-    pub read: u8,
-    pub size: u8,
-    pub cycles: u8,
-    pub page_cycles: u8,
-    pub page_crossed: bool,
-}
+#[cfg_attr(rustfmt, rustfmt_skip)]
+static OP_MODES: [AddressingMode; 256] = [
+//  0          1                       2          3                       4          5          6          7          8        9                 A            B                 C                 D                 E                 F
+    Implied,   IndexedIndirect,        None,      IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Accumulator, Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // 0
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageX, ZeroPageX, Implied, AbsoluteY(false), Implied,     AbsoluteY(true),  AbsoluteX(false), AbsoluteX(false), AbsoluteX(true),  AbsoluteX(true),  // 1
+    Absolute,  IndexedIndirect,        None,      IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Accumulator, Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // 2
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageX, ZeroPageX, Implied, AbsoluteY(false), Implied,     AbsoluteY(true),  AbsoluteX(false), AbsoluteX(false), AbsoluteX(true),  AbsoluteX(true),  // 3
+    Implied,   IndexedIndirect,        None,      IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Accumulator, Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // 4
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageX, ZeroPageX, Implied, AbsoluteY(false), Implied,     AbsoluteY(true),  AbsoluteX(false), AbsoluteX(false), AbsoluteX(true),  AbsoluteX(true),  // 5
+    Implied,   IndexedIndirect,        None,      IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Accumulator, Immediate,        Indirect,         Absolute,         Absolute,         Absolute,         // 6
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageX, ZeroPageX, Implied, AbsoluteY(false), Implied,     AbsoluteY(true),  AbsoluteX(false), AbsoluteX(false), AbsoluteX(true),  AbsoluteX(true),  // 7
+    Immediate, IndexedIndirect,        Immediate, IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Implied,     Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // 8
+    Relative,  IndirectIndexed(true),  None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageY, ZeroPageY, Implied, AbsoluteY(true),  Implied,     AbsoluteY(true),  AbsoluteX(true),  AbsoluteX(true),  AbsoluteY(true),  AbsoluteY(true),  // 9
+    Immediate, IndexedIndirect,        Immediate, IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Implied,     Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // A
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(false), ZeroPageX, ZeroPageX, ZeroPageY, ZeroPageY, Implied, AbsoluteY(false), Implied,     AbsoluteY(false), AbsoluteX(false), AbsoluteX(false), AbsoluteY(false), AbsoluteY(false), // B
+    Immediate, IndexedIndirect,        Immediate, IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Implied,     Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // C
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageX, ZeroPageX, Implied, AbsoluteY(false), Implied,     AbsoluteY(true),  AbsoluteX(false), AbsoluteX(false), AbsoluteX(true),  AbsoluteX(true),  // D
+    Immediate, IndexedIndirect,        Immediate, IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Implied,     Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // E
+    Relative,  IndirectIndexed(false), None,      IndirectIndexed(true),  ZeroPageX, ZeroPageX, ZeroPageX, ZeroPageX, Implied, AbsoluteY(false), Implied,     AbsoluteY(true),  AbsoluteX(false), AbsoluteX(false), AbsoluteX(true),  AbsoluteX(true),  // F
+];
 
-impl Instruction {
-    pub fn bytecode(&self, cpu: &Cpu) -> String {
-        let args = match self.mode {
-            Absolute => format!(
-                "{:02X} {:02X}",
-                self.addr as u8,
-                self.addr >> 8 as u8
-            ),
-            Indirect | AbsoluteX | AbsoluteY => {
-                format!("{:02X} {:02X}", self.args.0, self.args.1)
-            }
-            ZeroPageX | ZeroPageY | IndexedIndirect | IndirectIndexed => {
-                format!("{:02X}", self.args.0)
-            }
-            Immediate => format!("{:02X}", self.read),
-            Implied | Accumulator => "".into(),
-            Relative => format!(
-                "{:02X}",
-                self.addr.wrapping_sub(cpu.pc).wrapping_sub(2) as u8
-            ),
-            ZeroPage => format!("{:02X}", self.addr as u8),
-        };
-
-        format!("{:02X} {:6}", self.op, args)
-    }
-
-    pub fn to_string(&self, cpu: &Cpu) -> String {
-        let args = match self.mode {
-            Absolute => match self.label {
-                JMP | JSR => format!("${:04X}", self.addr),
-                _ => format!("${:04X} = {:02X}", self.addr, self.read),
-            },
-            AbsoluteX => format!(
-                "${:04X},X @ {:04X} = {:02X}",
-                self.args_u16(),
-                self.addr,
-                self.read
-            ),
-            AbsoluteY => format!(
-                "${:04X},Y @ {:04X} = {:02X}",
-                self.args_u16(),
-                self.addr,
-                self.read
-            ),
-            Immediate => format!("#${:02X}", self.read),
-            ZeroPage => format!("${:02X} = {:02X}", self.addr, self.read),
-            ZeroPageX => {
-                let addr = self.args.0;
-                format!(
-                    "${:02X},X @ {:02X} = {:02X}",
-                    addr,
-                    addr.wrapping_add(cpu.x),
-                    self.read
-                )
-            }
-            ZeroPageY => {
-                let addr = self.args.0;
-                format!(
-                    "${:02X},Y @ {:02X} = {:02X}",
-                    addr,
-                    addr.wrapping_add(cpu.y),
-                    self.read
-                )
-            }
-            Relative => format!("${:04X}", self.addr),
-            Accumulator => "A".into(),
-            Indirect => format!("(${:04X}) = {:04X}", self.args_u16(), self.addr),
-            IndexedIndirect => {
-                let param = self.args.0;
-                let indir = param.wrapping_add(cpu.x);
-                format!(
-                    "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                    param, indir, self.addr, self.read
-                )
-            }
-            IndirectIndexed => {
-                let param = self.args.0;
-                let indir = self.addr.wrapping_sub(u16::from(cpu.y));
-                format!(
-                    "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                    param, indir, self.addr, self.read
-                )
-            }
-            Implied => "".into(),
-        };
-
-        format!("{:?} {}", self.label, args)
-    }
-
-    fn args_u16(&self) -> u16 {
-        u16::from(self.args.1) << 8 | u16::from(self.args.0)
+impl From<u8> for AddressingMode {
+    #[inline(always)]
+    fn from(b: u8) -> Self {
+        OP_MODES[b as usize]
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(dead_code, non_snake_case)]
+#[allow(non_snake_case)]
 pub enum Label {
     ADC,
     AHX,
@@ -205,4 +125,32 @@ pub enum Label {
     TXS,
     TYA,
     XAA,
+}
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
+static OP_CODES: [Label; 256] = [
+//  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+    BRK, ORA, KIL, SLO, NOP, ORA, ASL, SLO, PHP, ORA, ASL, ANC, NOP, ORA, ASL, SLO, // 0
+    BPL, ORA, KIL, SLO, NOP, ORA, ASL, SLO, CLC, ORA, NOP, SLO, NOP, ORA, ASL, SLO, // 1
+    JSR, AND, KIL, RLA, BIT, AND, ROL, RLA, PLP, AND, ROL, ANC, BIT, AND, ROL, RLA, // 2
+    BMI, AND, KIL, RLA, NOP, AND, ROL, RLA, SEC, AND, NOP, RLA, NOP, AND, ROL, RLA, // 3
+    RTI, EOR, KIL, SRE, NOP, EOR, LSR, SRE, PHA, EOR, LSR, ALR, JMP, EOR, LSR, SRE, // 4
+    BVC, EOR, KIL, SRE, NOP, EOR, LSR, SRE, CLI, EOR, NOP, SRE, NOP, EOR, LSR, SRE, // 5
+    RTS, ADC, KIL, RRA, NOP, ADC, ROR, RRA, PLA, ADC, ROR, ARR, JMP, ADC, ROR, RRA, // 6
+    BVS, ADC, KIL, RRA, NOP, ADC, ROR, RRA, SEI, ADC, NOP, RRA, NOP, ADC, ROR, RRA, // 7
+    NOP, STA, NOP, SAX, STY, STA, STX, SAX, DEY, NOP, TXA, XAA, STY, STA, STX, SAX, // 8
+    BCC, STA, KIL, AHX, STY, STA, STX, SAX, TYA, STA, TXS, TAS, SHY, STA, SHX, AHX, // 9
+    LDY, LDA, LDX, LAX, LDY, LDA, LDX, LAX, TAY, LDA, TAX, LAX, LDY, LDA, LDX, LAX, // A
+    BCS, LDA, KIL, LAX, LDY, LDA, LDX, LAX, CLV, LDA, TSX, LAS, LDY, LDA, LDX, LAX, // B
+    CPY, CMP, NOP, DCP, CPY, CMP, DEC, DCP, INY, CMP, DEX, AXS, CPY, CMP, DEC, DCP, // C
+    BNE, CMP, KIL, DCP, NOP, CMP, DEC, DCP, CLD, CMP, NOP, DCP, NOP, CMP, DEC, DCP, // D
+    CPX, SBC, NOP, ISB, CPX, SBC, INC, ISB, INX, SBC, NOP, SBC, CPX, SBC, INC, ISB, // E
+    BEQ, SBC, KIL, ISB, NOP, SBC, INC, ISB, SED, SBC, NOP, ISB, NOP, SBC, INC, ISB, // F
+];
+
+impl From<u8> for Label {
+    #[inline(always)]
+    fn from(b: u8) -> Self {
+        OP_CODES[b as usize]
+    }
 }
