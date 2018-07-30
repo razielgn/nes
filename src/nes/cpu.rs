@@ -4,6 +4,7 @@ use instruction::{AddressingMode, Label, Label::*};
 use memory::MutMemoryAccess;
 
 const BRK_VECTOR: u16 = 0xFFFE;
+const RESET_VECTOR: u16 = 0xFFFC;
 
 pub type Cycles = usize;
 
@@ -79,6 +80,15 @@ impl Cpu {
         self.pc = self.read_word(interrupt.addr(), mem);
         self.p.set(InterruptDisable);
         self.cycles += 7;
+    }
+
+    pub fn reset<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+        self.interrupt = None;
+        self.pc = self.read_word(RESET_VECTOR, mem);
+        self.p.set(InterruptDisable);
+        self.sp = self.sp.wrapping_sub(3);
+
+        self.cycles = 0;
     }
 
     pub fn step<M: MutMemoryAccess>(&mut self, mem: &mut M) -> Cycles {
@@ -1266,5 +1276,19 @@ mod test {
         assert_eq!(2, cpu.pc);
         assert_eq!(6, cpu.cycles);
         assert_eq!(cpu.a, m[0x101]);
+    }
+
+    #[test]
+    fn reset() {
+        let mut cpu = Cpu::new(0);
+        let mut m = vec![0u8; 0xFFFF];
+        m[0xFFFC] = 0xAD;
+        m[0xFFFD] = 0xDE;
+        cpu.reset(&mut m);
+
+        assert_eq!(0xDEAD, cpu.pc);
+        assert_eq!(0x1FA, cpu.sp);
+        assert!(cpu.p.is_set(InterruptDisable));
+        assert_eq!(0, cpu.cycles);
     }
 }

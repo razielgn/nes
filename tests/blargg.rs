@@ -1,6 +1,6 @@
 extern crate nes;
 
-use nes::{MutMemoryAccess, Nes};
+use nes::{Cycles, MutMemoryAccess, Nes};
 
 /// Tests generally print information on screen, but also output information
 /// in other ways, in case the PPU doesn't work or there isn't one, as in an
@@ -385,14 +385,15 @@ fn cpu_timing_test6() {
 mod cpu_reset {
     use super::*;
 
+    /// At power, A,X,Y=0 P=$34 S=$FD
+    /// At reset, I flag set, S decreased by 3, no other change
     #[test]
-    #[ignore]
     fn registers() {
         run_test_rom("registers");
     }
 
+    /// Verifies that reset doesn't alter any RAM.
     #[test]
-    #[ignore]
     fn ram_after_reset() {
         run_test_rom("ram_after_reset");
     }
@@ -408,20 +409,37 @@ mod vbl_nmi_timing {
     }
 }
 
+const RESET_DELAY: Cycles = 310_000;
+
 fn run_test_rom(name: &str) {
     let mut nes = Nes::from_rom(format!("tests/roms/{}.nes", name));
+    let mut reset_delay: Option<Cycles> = None;
 
     loop {
-        nes.step();
+        let cycles = nes.step();
+        reset_delay = match reset_delay {
+            Some(0) => {
+                nes.reset();
+                None
+            }
+            Some(n) => Some(n.saturating_sub(cycles)),
+            None => None,
+        };
 
         let test_activity = nes.read_multi(0x6001, 3);
 
         if [0xDE, 0xB0, 0x61] == test_activity.as_slice() {
             match nes.read(0x6000u16) {
-                0x00 => break, // passed
-                0x80 => {}
-                // still running
-                _ => panic!("{}", read_message(&mut nes)),
+                0x00...0x7F => break, // passed
+                0x80 => {}            // still running
+                0x81 => {
+                    if reset_delay.is_none() {
+                        reset_delay = Some(RESET_DELAY);
+                    }
+                }
+                byte => {
+                    panic!("exit code: {:02X} {}", byte, read_message(&mut nes))
+                }
             }
         }
     }
@@ -437,5 +455,5 @@ fn read_message(nes: &mut Nes) -> String {
     }
 
     let bytes = nes.read_multi(0x6004, size as usize);
-    String::from_utf8_lossy(&bytes).into()
+    String::from_utf8(bytes).unwrap()
 }

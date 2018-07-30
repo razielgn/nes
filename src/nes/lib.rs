@@ -13,7 +13,7 @@ mod memory;
 mod ppu;
 mod rom;
 
-pub use cpu::Cpu;
+pub use cpu::{Cpu, Cycles};
 use mapper::{Mapper, SharedMapper};
 pub use memory::{MutMemory, MutMemoryAccess, Ram};
 use ppu::Ppu;
@@ -43,7 +43,7 @@ impl Nes {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> Cycles {
         debug!("step");
         self.prev_cpu = self.cpu;
 
@@ -64,6 +64,18 @@ impl Nes {
                 self.cpu.trigger_nmi();
             }
         }
+
+        cycles
+    }
+
+    pub fn reset(&mut self) {
+        let mut mmap = MutMemory {
+            ram: &mut self.ram,
+            mapper: self.mapper.clone(),
+            ppu: &mut self.ppu,
+        };
+
+        self.cpu.reset(&mut mmap)
     }
 
     pub fn set_pc(&mut self, pc: u16) {
