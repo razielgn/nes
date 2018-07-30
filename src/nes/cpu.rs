@@ -11,6 +11,7 @@ pub type Cycles = usize;
 #[derive(Clone, Copy, Debug)]
 enum Interrupt {
     Nmi,
+    #[allow(dead_code)]
     Irq,
 }
 

@@ -32,6 +32,15 @@ impl Ppu {
         }
     }
 
+    pub fn read_only(&self, addr: u16) -> u8 {
+        match 0x2000 + (addr % 8) {
+            0x2000 => self.control.as_u8(),
+            0x2001 => self.mask.as_u8(),
+            0x2002 => self.status_read_only(),
+            _ => 0,
+        }
+    }
+
     pub fn write(&mut self, addr: u16, val: u8) {
         match 0x2000 + (addr % 8) {
             0x2000 => self.control.set(val),
@@ -82,11 +91,23 @@ impl Ppu {
 
         status
     }
+
+    pub fn status_read_only(&self) -> u8 {
+        let mut status = self.control.as_u8() & 0x1F;
+
+        if self.vblank {
+            status.set_bit(7);
+        }
+
+        status
+    }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Control(u8);
 
+#[allow(dead_code)]
 impl Control {
     pub fn new() -> Self {
         Control(0)
@@ -155,9 +176,11 @@ impl Control {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Mask(u8);
 
+#[allow(dead_code)]
 impl Mask {
     pub fn new() -> Self {
         Mask(0)
@@ -204,18 +227,21 @@ impl Mask {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum VRamAddrIncr {
     Add1GoingAcross,
     Add32GoingDown,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum SpriteSize {
     EightByEight,
     SixteenBySixteen,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum MasterSlaveSelect {
     ReadBackdropFromExt,
