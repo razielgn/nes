@@ -1,7 +1,7 @@
 use self::Status::*;
 use bits::{BitOps, HighLowBits};
 use instruction::{AddressingMode, Label, Label::*};
-use memory::MutMemoryAccess;
+use memory::MutAccess;
 
 const BRK_VECTOR: u16 = 0xFFFE;
 const RESET_VECTOR: u16 = 0xFFFC;
@@ -70,11 +70,7 @@ impl Cpu {
         self.pc = addr;
     }
 
-    fn interrupt<M: MutMemoryAccess>(
-        &mut self,
-        mem: &mut M,
-        interrupt: Interrupt,
-    ) {
+    fn interrupt<M: MutAccess>(&mut self, mem: &mut M, interrupt: Interrupt) {
         let pc = self.pc;
         self.push_double(pc, mem);
         self.php(mem);
@@ -83,7 +79,7 @@ impl Cpu {
         self.cycles += 7;
     }
 
-    pub fn reset<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    pub fn reset<M: MutAccess>(&mut self, mem: &mut M) {
         self.interrupt = None;
         self.pc = self.read_word(RESET_VECTOR, mem);
         self.p.set(InterruptDisable);
@@ -92,7 +88,7 @@ impl Cpu {
         self.cycles = 0;
     }
 
-    pub fn step<M: MutMemoryAccess>(&mut self, mem: &mut M) -> Cycles {
+    pub fn step<M: MutAccess>(&mut self, mem: &mut M) -> Cycles {
         trace!("step");
 
         if let Some(int) = self.interrupt {
@@ -437,7 +433,7 @@ impl Cpu {
         self.interrupt = Some(Interrupt::Nmi);
     }
 
-    fn nop<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    fn nop<M: MutAccess>(&mut self, mem: &mut M) {
         use instruction::AddressingMode::*;
 
         match self.addr_mode {
@@ -449,7 +445,7 @@ impl Cpu {
         }
     }
 
-    fn php<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    fn php<M: MutAccess>(&mut self, mem: &mut M) {
         let mut p = self.p;
         p.set(BreakCommand);
 
@@ -460,7 +456,7 @@ impl Cpu {
         self.p.set(InterruptDisable);
     }
 
-    fn inc<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn inc<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         let addr = self.op_arg;
         let mut m = self.read(addr, mem);
         self.write(addr, m, mem); // Dummy write
@@ -470,7 +466,7 @@ impl Cpu {
         m
     }
 
-    fn dec<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn dec<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         let addr = self.op_arg;
         let mut m = self.read(addr, mem);
         self.write(addr, m, mem); // Dummy write
@@ -509,7 +505,7 @@ impl Cpu {
         self.a = sub;
     }
 
-    fn asl<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn asl<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         if self.addr_mode == AddressingMode::Accumulator {
             self.p.set_if(CarryFlag, self.a.is_bit_set(7));
             self.a <<= 1;
@@ -527,7 +523,7 @@ impl Cpu {
         }
     }
 
-    fn ror<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn ror<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         if self.addr_mode == AddressingMode::Accumulator {
             self.ror_acc();
             0 // TODO: extract ror_addr
@@ -553,7 +549,7 @@ impl Cpu {
         self.p.set_if_zn(self.a);
     }
 
-    fn rol<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn rol<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
         if self.addr_mode == AddressingMode::Accumulator {
@@ -605,7 +601,7 @@ impl Cpu {
         self.a = sum;
     }
 
-    fn lsr<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn lsr<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         let addr = self.op_arg;
 
         if self.addr_mode == AddressingMode::Accumulator {
@@ -624,7 +620,7 @@ impl Cpu {
         }
     }
 
-    fn branch_relative<M: MutMemoryAccess>(&mut self, mem: &mut M, branch: bool) {
+    fn branch_relative<M: MutAccess>(&mut self, mem: &mut M, branch: bool) {
         let offset_addr = self.op_arg;
         let offset = u16::from(self.read(offset_addr, mem));
 
@@ -645,43 +641,40 @@ impl Cpu {
         }
     }
 
-    fn dummy_read<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    fn dummy_read<M: MutAccess>(&mut self, mem: &mut M) {
         trace!("dummy read");
         let pc = self.pc;
         let _ = self.read(pc, mem);
     }
 
-    fn read<M: MutMemoryAccess>(&mut self, addr: u16, mem: &mut M) -> u8 {
+    fn read<M: MutAccess>(&mut self, addr: u16, mem: &mut M) -> u8 {
         self.inc_cycles();
-        mem.read(addr)
+        mem.mut_read(addr)
     }
 
-    fn read_word<M: MutMemoryAccess>(&mut self, addr: u16, mem: &mut M) -> u16 {
+    fn read_word<M: MutAccess>(&mut self, addr: u16, mem: &mut M) -> u16 {
         self.inc_cycles();
         self.inc_cycles();
-        mem.read_word(addr)
+        mem.mut_read_word(addr)
     }
 
-    fn read_word_indirect_hw_bug<M: MutMemoryAccess>(
+    fn read_word_indirect_hw_bug<M: MutAccess>(
         &mut self,
         addr: u16,
         mem: &mut M,
     ) -> u16 {
         self.inc_cycles();
         self.inc_cycles();
-        mem.read_word_bug(addr)
+        mem.mut_read_word_bug(addr)
     }
 
-    fn read_word_page_wraparound<M: MutMemoryAccess>(
-        &mut self,
-        mem: &mut M,
-    ) -> u16 {
+    fn read_word_page_wraparound<M: MutAccess>(&mut self, mem: &mut M) -> u16 {
         let lo = self.read(0xff, mem);
         let hi = self.read(0x00, mem);
         u16::from_hilo(hi, lo)
     }
 
-    fn write<M: MutMemoryAccess>(&mut self, addr: u16, val: u8, mem: &mut M) {
+    fn write<M: MutAccess>(&mut self, addr: u16, val: u8, mem: &mut M) {
         self.inc_cycles();
         mem.write(addr, val);
     }
@@ -691,7 +684,7 @@ impl Cpu {
         self.cycles += 1;
     }
 
-    fn fetch_op<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    fn fetch_op<M: MutAccess>(&mut self, mem: &mut M) {
         let pc = self.pc;
         self.op = self.read(pc, mem);
         self.label = self.op.into();
@@ -701,7 +694,7 @@ impl Cpu {
         self.op_arg_from_mode(mem);
     }
 
-    fn op_arg_from_mode<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    fn op_arg_from_mode<M: MutAccess>(&mut self, mem: &mut M) {
         use instruction::AddressingMode::*;
 
         let pc = self.pc;
@@ -815,30 +808,30 @@ impl Cpu {
         };
     }
 
-    fn push<M: MutMemoryAccess>(&mut self, val: u8, mem: &mut M) {
+    fn push<M: MutAccess>(&mut self, val: u8, mem: &mut M) {
         let addr = 0x100u16.wrapping_add(u16::from(self.sp));
         self.write(addr, val, mem);
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    fn push_double<M: MutMemoryAccess>(&mut self, val: u16, mem: &mut M) {
+    fn push_double<M: MutAccess>(&mut self, val: u16, mem: &mut M) {
         self.push(val.high(), mem);
         self.push(val.low(), mem);
     }
 
-    fn pop<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u8 {
+    fn pop<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let addr = 0x100u16.wrapping_add(u16::from(self.sp));
         self.read(addr, mem)
     }
 
-    fn pop_double<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u16 {
+    fn pop_double<M: MutAccess>(&mut self, mem: &mut M) -> u16 {
         let lo = self.pop(mem);
         let hi = self.pop(mem);
         u16::from_hilo(hi, lo)
     }
 
-    fn pop_p<M: MutMemoryAccess>(&mut self, mem: &mut M) {
+    fn pop_p<M: MutAccess>(&mut self, mem: &mut M) {
         self.p = self.pop(mem).into();
         self.p.unset(Status::BreakCommand);
         self.p.set(Status::UnusedFlag);

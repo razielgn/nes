@@ -23,7 +23,7 @@ impl Ppu {
         }
     }
 
-    pub fn read(&mut self, addr: u16) -> u8 {
+    pub fn mut_read(&mut self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
             0x2000 => self.control.as_u8(),
             0x2001 => self.mask.as_u8(),
@@ -32,7 +32,7 @@ impl Ppu {
         }
     }
 
-    pub fn read_only(&self, addr: u16) -> u8 {
+    pub fn read(&self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
             0x2000 => self.control.as_u8(),
             0x2001 => self.mask.as_u8(),
@@ -347,7 +347,7 @@ mod tests {
             ppu.step();
         }
 
-        assert!(ppu.read(0x2002).is_bit_set(7));
+        assert!(ppu.mut_read(0x2002).is_bit_set(7));
         assert!(!ppu.read(0x2002).is_bit_set(7));
     }
 

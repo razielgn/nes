@@ -14,8 +14,8 @@ mod ppu;
 mod rom;
 
 pub use cpu::{Cpu, Cycles};
-use mapper::{Mapper, SharedMapper};
-pub use memory::{MutMemory, MutMemoryAccess, Ram};
+use mapper::Mapper;
+pub use memory::{Access, Memory, MutMemory, Ram};
 use ppu::Ppu;
 pub use rom::Rom;
 use std::path::Path;
@@ -23,7 +23,7 @@ use std::path::Path;
 pub struct Nes {
     prev_cpu: Cpu,
     cpu: Cpu,
-    mapper: SharedMapper,
+    mapper: Mapper,
     ppu: Ppu,
     ram: Ram,
 }
@@ -31,13 +31,13 @@ pub struct Nes {
 impl Nes {
     pub fn from_rom<P: AsRef<Path>>(path: P) -> Self {
         let rom = Rom::from_path(path);
-        let mut mapper = Mapper::new(rom);
+        let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
 
         Nes {
             cpu: Cpu::new(pc),
             prev_cpu: Cpu::new(pc),
-            mapper: mapper.into_shared(),
+            mapper: mapper,
             ppu: Ppu::new(),
             ram: Ram::new(),
         }
@@ -50,7 +50,7 @@ impl Nes {
         let cycles = {
             let mut mmap = MutMemory {
                 ram: &mut self.ram,
-                mapper: self.mapper.clone(),
+                mapper: &mut self.mapper,
                 ppu: &mut self.ppu,
             };
 
@@ -71,7 +71,7 @@ impl Nes {
     pub fn reset(&mut self) {
         let mut mmap = MutMemory {
             ram: &mut self.ram,
-            mapper: self.mapper.clone(),
+            mapper: &mut self.mapper,
             ppu: &mut self.ppu,
         };
 
@@ -82,7 +82,7 @@ impl Nes {
         self.cpu.jump(pc);
     }
 
-    pub fn cpu_state_str(&mut self) -> String {
+    pub fn cpu_state_str(&self) -> String {
         use instruction::AddressingMode::*;
 
         let p: u8 = self.prev_cpu.p.into();
@@ -187,26 +187,18 @@ impl Nes {
             cyc = (self.prev_cpu.cycles * 3) % 341,
         )
     }
+
+    fn memory<'a>(&'a self) -> Memory<'a> {
+        Memory {
+            ram: &self.ram,
+            mapper: &self.mapper,
+            ppu: &self.ppu,
+        }
+    }
 }
 
-impl MutMemoryAccess for Nes {
-    fn read(&mut self, addr: u16) -> u8 {
-        let mut mmap = MutMemory {
-            ram: &mut self.ram,
-            mapper: self.mapper.clone(),
-            ppu: &mut self.ppu,
-        };
-
-        mmap.read(addr)
-    }
-
-    fn write(&mut self, addr: u16, val: u8) {
-        let mut mmap = MutMemory {
-            ram: &mut self.ram,
-            mapper: self.mapper.clone(),
-            ppu: &mut self.ppu,
-        };
-
-        mmap.write(addr, val);
+impl Access for Nes {
+    fn read(&self, addr: u16) -> u8 {
+        self.memory().read(addr)
     }
 }

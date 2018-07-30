@@ -1,9 +1,5 @@
-use memory::MutMemoryAccess;
+use bits::HighLowBits;
 use rom::Rom;
-use std::cell::RefCell;
-use std::rc::Rc;
-
-pub type SharedMapper = Rc<RefCell<Mapper>>;
 
 pub struct Mapper {
     rom: Rom,
@@ -24,40 +20,40 @@ impl Mapper {
         }
     }
 
-    pub fn into_shared(self) -> SharedMapper {
-        Rc::new(RefCell::new(self))
-    }
-
-    pub fn write(&mut self, addr: u16, val: u8) {
-        let addr = addr as usize;
-
-        match addr {
-            0x4020...0x5FFF => panic!("write in ROM-CHR"),
-            0x6000...0x7FFF => self.rom.sram[addr - 0x6000] = val,
-            0x8000...0xFFFF => self.bank1 = val as usize % self.banks,
-            _ => unimplemented!(),
-        }
-    }
-}
-
-impl MutMemoryAccess for Mapper {
-    fn read(&mut self, addr: u16) -> u8 {
+    pub fn read(&self, addr: u16) -> u8 {
         let addr = addr as usize;
 
         match addr {
             0x4020...0x5FFF => self.rom.chr[addr - 0x4020],
             0x6000...0x7FFF => self.rom.sram[addr - 0x6000],
             0x8000...0xBFFF => {
-                self.rom.prg[self.bank1 * 0x4000 + (addr - 0x8000)]
+                let idx = self.bank1 * 0x4000 + (addr - 0x8000);
+                self.rom.prg[idx]
             }
             0xC000...0xFFFF => {
-                self.rom.prg[self.bank2 * 0x4000 + (addr - 0xC000)]
+                let idx = self.bank2 * 0x4000 + (addr - 0xC000);
+                self.rom.prg[idx]
             }
-            _ => panic!("attempted to read on mapper at {:04X}", addr),
+            _ => unreachable!(),
         }
     }
 
-    fn write(&mut self, _addr: u16, _val: u8) {
-        panic!("cannot write to mapper");
+    pub fn read_word(&self, addr: u16) -> u16 {
+        let lo = self.read(addr);
+        let hi = self.read(addr.wrapping_add(1));
+        u16::from_hilo(hi, lo)
+    }
+
+    pub fn write(&mut self, addr: u16, val: u8) {
+        let addr = addr as usize;
+
+        match addr {
+            0x4020...0x5FFF => {
+                warn!("illegal write at {:04X} of {:02X}", addr, addr);
+            }
+            0x6000...0x7FFF => self.rom.sram[addr - 0x6000] = val,
+            0x8000...0xFFFF => self.bank1 = val as usize % self.banks,
+            _ => unreachable!(),
+        }
     }
 }

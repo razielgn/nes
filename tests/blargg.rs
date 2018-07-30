@@ -1,6 +1,6 @@
 extern crate nes;
 
-use nes::{Cycles, MutMemoryAccess, Nes};
+use nes::{Access, Cycles, Nes};
 
 /// Tests generally print information on screen, but also output information
 /// in other ways, in case the PPU doesn't work or there isn't one, as in an
