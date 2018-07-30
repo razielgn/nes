@@ -23,87 +23,98 @@ use nes::{Cycles, MutMemoryAccess, Nes};
 /// data at $6000+ is valid, as opposed to some other NES program, $DE $B0
 /// $G1 is written to $6001-$6003.
 
-mod instr_test_v3 {
+mod instr_test_v5 {
     use super::*;
 
     #[test]
     fn basics() {
-        run_test_rom("basics");
+        run_test_rom("instr_test_v5/01-basics");
     }
 
     #[test]
     fn implied() {
-        run_test_rom("implied");
+        run_test_rom("instr_test_v5/02-implied");
     }
 
     #[test]
     fn immediate() {
-        run_test_rom("immediate");
+        run_test_rom("instr_test_v5/03-immediate");
     }
 
     #[test]
     fn zero_page() {
-        run_test_rom("zero_page");
+        run_test_rom("instr_test_v5/04-zero_page");
     }
 
     #[test]
     fn zp_xy() {
-        run_test_rom("zp_xy");
+        run_test_rom("instr_test_v5/05-zp_xy");
     }
 
     #[test]
     fn absolute() {
-        run_test_rom("absolute");
+        run_test_rom("instr_test_v5/06-absolute");
     }
 
     #[test]
     fn abs_xy() {
-        run_test_rom("abs_xy");
+        run_test_rom("instr_test_v5/07-abs_xy");
     }
 
     #[test]
     fn ind_x() {
-        run_test_rom("ind_x");
+        run_test_rom("instr_test_v5/08-ind_x");
     }
 
     #[test]
     fn ind_y() {
-        run_test_rom("ind_y");
+        run_test_rom("instr_test_v5/09-ind_y");
     }
 
     #[test]
     fn branches() {
-        run_test_rom("branches");
+        run_test_rom("instr_test_v5/10-branches");
     }
 
     #[test]
+    #[ignore]
     fn stack() {
-        run_test_rom("stack");
+        run_test_rom("instr_test_v5/11-stack");
     }
 
     #[test]
     fn jmp_jsr() {
-        run_test_rom("jmp_jsr");
+        run_test_rom("instr_test_v5/12-jmp_jsr");
     }
 
     #[test]
     fn rts() {
-        run_test_rom("rts");
+        run_test_rom("instr_test_v5/13-rts");
     }
 
     #[test]
     fn rti() {
-        run_test_rom("rti");
+        run_test_rom("instr_test_v5/14-rti");
     }
 
     #[test]
     fn brk() {
-        run_test_rom("brk");
+        run_test_rom("instr_test_v5/15-brk");
     }
 
     #[test]
     fn special() {
-        run_test_rom("special");
+        run_test_rom("instr_test_v5/16-special");
+    }
+
+    #[test]
+    fn all_instrs() {
+        run_test_rom("instr_test_v5/all_instrs");
+    }
+
+    #[test]
+    fn official_only() {
+        run_test_rom("instr_test_v5/official_only");
     }
 }
 
