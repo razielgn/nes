@@ -77,7 +77,6 @@ mod instr_test_v5 {
     }
 
     #[test]
-    #[ignore]
     fn stack() {
         run_test_rom("instr_test_v5/11-stack");
     }
