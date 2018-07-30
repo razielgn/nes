@@ -19,7 +19,7 @@ fn nestest() {
         nes.step();
         assert_eq!(
             expected_state.unwrap(),
-            nes.cpu_state_str(),
+            format!("{}", nes.debug_state()),
             "line {}",
             i + 1
         );

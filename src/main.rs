@@ -12,6 +12,6 @@ fn main() {
 
     loop {
         nes.step();
-        println!("{}", nes.cpu_state_str());
+        println!("{}", nes.debug_state());
     }
 }
