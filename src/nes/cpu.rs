@@ -1287,7 +1287,7 @@ mod test {
         cpu.reset(&mut m);
 
         assert_eq!(0xDEAD, cpu.pc);
-        assert_eq!(0x1FA, cpu.sp);
+        assert_eq!(0xFA, cpu.sp);
         assert!(cpu.p.is_set(InterruptDisable));
         assert_eq!(0, cpu.cycles);
     }
