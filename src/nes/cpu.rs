@@ -430,8 +430,7 @@ impl Cpu {
 
         debug!("{:X?}", self);
 
-        let elapsed_cycles = self.cycles - old_cycles;
-        elapsed_cycles
+        self.cycles - old_cycles
     }
 
     pub fn trigger_nmi(&mut self) {

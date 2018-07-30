@@ -108,8 +108,8 @@ impl Nes {
                 mode = format!("${:04X},Y", addr);
             }
             Accumulator => {
-                args = format!("");
-                mode = format!("A");
+                args = "".into();
+                mode = "A".into();
             }
             Indirect => {
                 let pc = self.prev_cpu.pc;
@@ -165,9 +165,9 @@ impl Nes {
 
                 mode = format!("${:04X}", addr);
             }
-            _ => {
-                args = format!("");
-                mode = format!("");
+            None | Implied => {
+                args = "".into();
+                mode = "".into();
             }
         }
 
