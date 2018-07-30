@@ -464,6 +464,6 @@ fn read_message(nes: &mut Nes) -> String {
         }
     }
 
-    let bytes = nes.read_multi(0x6004, size as usize);
+    let bytes = nes.read_multi(0x6004, size);
     String::from_utf8(bytes).unwrap()
 }

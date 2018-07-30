@@ -403,17 +403,17 @@ impl Cpu {
                 self.x = n;
             }
             SHY => {
-                let (hi, lo) = self.op_arg.split();
+                let (mut hi, lo) = self.op_arg.split();
                 let val = self.y & (hi + 1);
 
-                let addr = (u16::from(val) << 8) | u16::from(lo);
+                let addr = u16::from_hilo(val, lo);
                 self.write(addr, val, mem);
             }
             SHX => {
                 let (hi, lo) = self.op_arg.split();
                 let val = self.x & (hi + 1);
 
-                let addr = (u16::from(val) << 8) | u16::from(lo);
+                let addr = u16::from_hilo(val, lo);
                 self.write(addr, val, mem);
             }
             BRK => {
@@ -677,9 +677,9 @@ impl Cpu {
         &mut self,
         mem: &mut M,
     ) -> u16 {
-        let lo = u16::from(self.read(0xff, mem));
-        let hi = u16::from(self.read(0x00, mem));
-        (hi << 8) | lo
+        let lo = self.read(0xff, mem);
+        let hi = self.read(0x00, mem);
+        u16::from_hilo(hi, lo)
     }
 
     fn write<M: MutMemoryAccess>(&mut self, addr: u16, val: u8, mem: &mut M) {
@@ -834,10 +834,9 @@ impl Cpu {
     }
 
     fn pop_double<M: MutMemoryAccess>(&mut self, mem: &mut M) -> u16 {
-        let lo = u16::from(self.pop(mem));
-        let hi = u16::from(self.pop(mem));
-
-        hi << 8 | lo
+        let lo = self.pop(mem);
+        let hi = self.pop(mem);
+        u16::from_hilo(hi, lo)
     }
 
     fn pop_p<M: MutMemoryAccess>(&mut self, mem: &mut M) {

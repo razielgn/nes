@@ -1,3 +1,4 @@
+use bits::HighLowBits;
 use mapper::SharedMapper;
 use ppu::Ppu;
 
@@ -6,21 +7,22 @@ pub trait MutMemoryAccess {
     fn write(&mut self, addr: u16, val: u8);
 
     fn read_word(&mut self, addr: u16) -> u16 {
-        let lo = u16::from(self.read(addr));
-        let hi = u16::from(self.read(addr + 1));
-        hi << 8 | lo
+        let lo = self.read(addr);
+        let hi = self.read(addr.wrapping_add(1));
+        u16::from_hilo(hi, lo)
     }
 
     fn read_word_bug(&mut self, addr: u16) -> u16 {
-        let lo = u16::from(self.read(addr));
-        let hi = u16::from(self.read(
-            (addr & 0xff00) | u16::from((addr as u8).wrapping_add(1)),
-        ));
-        hi << 8 | lo
+        let lo = self.read(addr);
+        let hi_addr = (addr & 0xff00) | u16::from((addr as u8).wrapping_add(1));
+        let hi = self.read(hi_addr);
+        u16::from_hilo(hi, lo)
     }
 
-    fn read_multi(&mut self, offset: u16, bytes: usize) -> Vec<u8> {
-        (0..bytes).map(|i| self.read(offset + i as u16)).collect()
+    fn read_multi(&mut self, offset: u16, bytes: u16) -> Vec<u8> {
+        (0u16..bytes)
+            .map(|i| self.read(offset.wrapping_add(i)))
+            .collect()
     }
 }
 
@@ -70,10 +72,10 @@ pub struct MutMemory<'a> {
 
 impl<'a> MutMemory<'a> {
     fn dma_transfer(&mut self, val: u8) {
-        let address = u16::from(val) << 8;
+        let address = u16::from_hilo(val, 0);
 
         for i in 0..256 {
-            let b = self.read(address + i);
+            let b = self.read(address.wrapping_add(i));
             self.ppu.write(0x2004, b);
         }
     }

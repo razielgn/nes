@@ -17,16 +17,18 @@ impl BitOps for u8 {
     }
 }
 
-pub trait HighLowBits {
+pub trait HighLowBits: Sized {
+    fn from_hilo(hi: u8, lo: u8) -> Self;
     fn high(&self) -> u8;
     fn low(&self) -> u8;
     fn split(&self) -> (u8, u8);
-
-    fn set_high(&mut self, byte: u8);
-    fn set_low(&mut self, byte: u8);
 }
 
 impl HighLowBits for u16 {
+    fn from_hilo(hi: u8, lo: u8) -> Self {
+        u16::from(hi) << 8 | u16::from(lo)
+    }
+
     fn high(&self) -> u8 {
         (*self >> 8) as u8
     }
@@ -37,13 +39,5 @@ impl HighLowBits for u16 {
 
     fn split(&self) -> (u8, u8) {
         (self.high(), self.low())
-    }
-
-    fn set_high(&mut self, byte: u8) {
-        *self |= u16::from(byte) << 8;
-    }
-
-    fn set_low(&mut self, byte: u8) {
-        *self |= u16::from(byte);
     }
 }
