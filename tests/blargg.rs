@@ -77,6 +77,7 @@ mod instr_test_v5 {
     }
 
     #[test]
+    #[ignore]
     fn stack() {
         run_test_rom("instr_test_v5/11-stack");
     }
@@ -398,6 +399,7 @@ mod cpu_reset {
     /// At power, A,X,Y=0 P=$34 S=$FD
     /// At reset, I flag set, S decreased by 3, no other change
     #[test]
+    #[ignore]
     fn registers() {
         run_test_rom("registers");
     }
@@ -440,22 +442,24 @@ fn run_test_rom(name: &str) {
 
         if [0xDE, 0xB0, 0x61] == test_activity.as_slice() {
             match nes.read(0x6000u16) {
-                0x00...0x7F => break, // passed
-                0x80 => {}            // still running
+                0x00 => {
+                    // passed
+                    println!("{}", read_message(&nes));
+                    break;
+                }
+                0x80 => {} // still running
                 0x81 => {
                     if reset_delay.is_none() {
                         reset_delay = Some(RESET_DELAY);
                     }
                 }
-                byte => {
-                    panic!("exit code: {:02X} {}", byte, read_message(&mut nes))
-                }
+                byte => panic!("exit code: {:02X}\n{}", byte, read_message(&nes)),
             }
         }
     }
 }
 
-fn read_message(nes: &mut Nes) -> String {
+fn read_message(nes: &Nes) -> String {
     let mut size = 0;
     for i in 0x6004u16.. {
         if nes.read(i) == 0 {
