@@ -1,6 +1,7 @@
 use bits::HighLowBits;
 use rom::Rom;
 
+#[derive(Clone)]
 pub struct Mapper {
     rom: Rom,
     banks: usize,

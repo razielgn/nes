@@ -16,10 +16,10 @@ fn nestest() {
     nes.set_pc(0xC000);
 
     for (i, expected_state) in reader.lines().enumerate() {
-        nes.step();
+        let state = nes.debug_step();
         assert_eq!(
             expected_state.unwrap(),
-            format!("{}", nes.debug_state()),
+            format!("{}", state),
             "line {}",
             i + 1
         );

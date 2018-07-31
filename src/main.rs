@@ -11,7 +11,7 @@ fn main() {
     let mut nes = Nes::from_rom(path);
 
     loop {
-        nes.step();
-        println!("{}", nes.debug_state());
+        let debug_state = nes.debug_step();
+        println!("{}", debug_state);
     }
 }

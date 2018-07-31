@@ -3,7 +3,7 @@ use self::SpriteSize::*;
 use self::VRamAddrIncr::*;
 use bits::BitOps;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ppu {
     control: Control,
     mask: Mask,
@@ -104,7 +104,7 @@ impl Ppu {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Control(u8);
 
 #[allow(dead_code)]
@@ -177,7 +177,7 @@ impl Control {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Mask(u8);
 
 #[allow(dead_code)]

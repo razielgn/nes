@@ -48,6 +48,7 @@ pub trait Access {
 
 const RAM_SIZE: usize = 0x2000;
 
+#[derive(Clone, Copy)]
 pub struct Ram([u8; RAM_SIZE]);
 
 impl Ram {

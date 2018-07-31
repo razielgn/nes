@@ -426,13 +426,13 @@ fn run_test_rom(name: &str) {
     let mut reset_delay: Option<Cycles> = None;
 
     loop {
-        let cycles = nes.step();
+        let elapsed_cycles = nes.step();
         reset_delay = match reset_delay {
             Some(0) => {
                 nes.reset();
                 None
             }
-            Some(n) => Some(n.saturating_sub(cycles)),
+            Some(n) => Some(n.saturating_sub(elapsed_cycles)),
             None => None,
         };
 

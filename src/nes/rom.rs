@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+#[derive(Clone)]
 pub struct Rom {
     pub flags_6: u8,      // TODO
     pub flags_7: u8,      // TODO
