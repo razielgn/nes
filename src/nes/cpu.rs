@@ -16,10 +16,10 @@ enum Interrupt {
 }
 
 impl Interrupt {
-    pub fn addr(&self) -> u16 {
+    pub fn addr(self) -> u16 {
         use self::Interrupt::*;
 
-        match *self {
+        match self {
             Nmi => 0xFFFA,
             Irq => 0xFFFE,
         }
@@ -900,7 +900,7 @@ impl P {
         self.0 &= !(1 << (s as u8));
     }
 
-    fn is_set(&self, s: Status) -> bool {
+    fn is_set(self, s: Status) -> bool {
         self.0.is_bit_set(s as u8)
     }
 }

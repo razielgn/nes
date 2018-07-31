@@ -117,11 +117,11 @@ impl Control {
         self.0 = v;
     }
 
-    pub fn as_u8(&self) -> u8 {
+    pub fn as_u8(self) -> u8 {
         self.0
     }
 
-    pub fn base_nametable_addr(&self) -> u16 {
+    pub fn base_nametable_addr(self) -> u16 {
         match self.0 & 3 {
             0 => 0x2000,
             1 => 0x2400,
@@ -131,7 +131,7 @@ impl Control {
         }
     }
 
-    pub fn vram_addr_incr(&self) -> VRamAddrIncr {
+    pub fn vram_addr_incr(self) -> VRamAddrIncr {
         if self.0.is_bit_set(2) {
             Add32GoingDown
         } else {
@@ -139,7 +139,7 @@ impl Control {
         }
     }
 
-    pub fn sprite_pattern_table_addr(&self) -> u16 {
+    pub fn sprite_pattern_table_addr(self) -> u16 {
         if self.0.is_bit_set(3) {
             0x1000
         } else {
@@ -147,7 +147,7 @@ impl Control {
         }
     }
 
-    pub fn background_pattern_table_addr(&self) -> u16 {
+    pub fn background_pattern_table_addr(self) -> u16 {
         if self.0.is_bit_set(4) {
             0x1000
         } else {
@@ -155,7 +155,7 @@ impl Control {
         }
     }
 
-    pub fn sprite_size(&self) -> SpriteSize {
+    pub fn sprite_size(self) -> SpriteSize {
         if self.0.is_bit_set(5) {
             SixteenBySixteen
         } else {
@@ -163,7 +163,7 @@ impl Control {
         }
     }
 
-    pub fn master_slave_select(&self) -> MasterSlaveSelect {
+    pub fn master_slave_select(self) -> MasterSlaveSelect {
         if self.0.is_bit_set(6) {
             OutputColorOnExt
         } else {
@@ -171,7 +171,7 @@ impl Control {
         }
     }
 
-    pub fn nmi_at_next_vblank(&self) -> bool {
+    pub fn nmi_at_next_vblank(self) -> bool {
         self.0.is_bit_set(7)
     }
 }
@@ -190,39 +190,39 @@ impl Mask {
         self.0 = v;
     }
 
-    pub fn as_u8(&self) -> u8 {
+    pub fn as_u8(self) -> u8 {
         self.0
     }
 
-    pub fn grayscale(&self) -> bool {
+    pub fn grayscale(self) -> bool {
         self.0.is_bit_set(0)
     }
 
-    pub fn show_background_in_contour(&self) -> bool {
+    pub fn show_background_in_contour(self) -> bool {
         self.0.is_bit_set(1)
     }
 
-    pub fn show_sprites_in_contour(&self) -> bool {
+    pub fn show_sprites_in_contour(self) -> bool {
         self.0.is_bit_set(2)
     }
 
-    pub fn show_background(&self) -> bool {
+    pub fn show_background(self) -> bool {
         self.0.is_bit_set(3)
     }
 
-    pub fn show_sprites(&self) -> bool {
+    pub fn show_sprites(self) -> bool {
         self.0.is_bit_set(4)
     }
 
-    pub fn emphasize_red(&self) -> bool {
+    pub fn emphasize_red(self) -> bool {
         self.0.is_bit_set(5)
     }
 
-    pub fn emphasize_green(&self) -> bool {
+    pub fn emphasize_green(self) -> bool {
         self.0.is_bit_set(6)
     }
 
-    pub fn emphasize_blue(&self) -> bool {
+    pub fn emphasize_blue(self) -> bool {
         self.0.is_bit_set(7)
     }
 }
