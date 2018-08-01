@@ -371,13 +371,13 @@ mod instr_timing {
     #[test]
     #[ignore]
     fn instr_timing() {
-        run_test_rom("instr_timing");
+        run_test_rom("instr_timing/instr_timing");
     }
 
     #[test]
     #[ignore]
     fn branch_timing() {
-        run_test_rom("branch_timing");
+        run_test_rom("instr_timing/branch_timing");
     }
 }
 
