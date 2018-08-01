@@ -381,18 +381,6 @@ mod instr_timing {
     }
 }
 
-#[test]
-#[ignore]
-fn cpu_dummy_reads() {
-    run_test_rom("cpu_dummy_reads");
-}
-
-#[test]
-#[ignore]
-fn cpu_timing_test6() {
-    run_test_rom("cpu_timing");
-}
-
 mod cpu_reset {
     use super::*;
 
@@ -408,16 +396,6 @@ mod cpu_reset {
     #[test]
     fn ram_after_reset() {
         run_test_rom("ram_after_reset");
-    }
-}
-
-mod vbl_nmi_timing {
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn frame_basics() {
-        run_test_rom("frame_basics");
     }
 }
 
