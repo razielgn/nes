@@ -164,7 +164,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn cli_latency() {
-        run_test_rom("cli_latency");
+        run_test_rom("cpu_interrupts_v2/cli_latency");
     }
 
     /// NMI behavior when it interrupts BRK. Occasionally fails on
@@ -186,7 +186,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn nmi_and_brk() {
-        run_test_rom("nmi_and_brk");
+        run_test_rom("cpu_interrupts_v2/nmi_and_brk");
     }
 
     /// NMI behavior when it interrupts IRQ vectoring.
@@ -209,7 +209,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn nmi_and_irq() {
-        run_test_rom("nmi_and_irq");
+        run_test_rom("cpu_interrupts_v2/nmi_and_irq");
     }
 
     /// Has IRQ occur at various times around sprite DMA.
@@ -240,7 +240,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn irq_and_dma() {
-        run_test_rom("irq_and_dma");
+        run_test_rom("cpu_interrupts_v2/irq_and_dma");
     }
 
     /// A taken non-page-crossing branch ignores IRQ during
@@ -305,7 +305,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn branch_delays_irq() {
-        run_test_rom("branch_delays_irq");
+        run_test_rom("cpu_interrupts_v2/branch_delays_irq");
     }
 }
 
@@ -319,14 +319,14 @@ mod instr_misc {
     /// Verifies that $FFFF wraps around to 0 for STA abs,X and LDA abs,X.
     #[test]
     fn abs_x_wrap() {
-        run_test_rom("abs_x_wrap");
+        run_test_rom("instr_misc/abs_x_wrap");
     }
 
     /// Verifies that branching past end or before beginning of RAM wraps
     /// around.
     #[test]
     fn branch_wrap() {
-        run_test_rom("branch_wrap");
+        run_test_rom("instr_misc/branch_wrap");
     }
 
     /// Tests some instructions that do dummy reads before the real read/write.
@@ -340,7 +340,7 @@ mod instr_misc {
     /// ROL ABS,X always
     #[test]
     fn dummy_reads() {
-        run_test_rom("dummy_reads");
+        run_test_rom("instr_misc/dummy_reads");
     }
 
     /// Tests dummy reads for (hopefully) ALL instructions which do them,
@@ -349,7 +349,7 @@ mod instr_misc {
     #[test]
     #[ignore]
     fn dummy_reads_apu() {
-        run_test_rom("dummy_reads_apu");
+        run_test_rom("instr_misc/dummy_reads_apu");
     }
 }
 
@@ -389,13 +389,13 @@ mod cpu_reset {
     #[test]
     #[ignore]
     fn registers() {
-        run_test_rom("registers");
+        run_test_rom("cpu_reset/registers");
     }
 
     /// Verifies that reset doesn't alter any RAM.
     #[test]
     fn ram_after_reset() {
-        run_test_rom("ram_after_reset");
+        run_test_rom("cpu_reset/ram_after_reset");
     }
 }
 
