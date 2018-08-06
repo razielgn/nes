@@ -157,7 +157,7 @@ impl Control {
 
     pub fn sprite_size(self) -> SpriteSize {
         if self.0.is_bit_set(5) {
-            SixteenBySixteen
+            EightBySixteen
         } else {
             EightByEight
         }
@@ -238,7 +238,7 @@ pub enum VRamAddrIncr {
 #[derive(Debug, PartialEq)]
 pub enum SpriteSize {
     EightByEight,
-    SixteenBySixteen,
+    EightBySixteen,
 }
 
 #[allow(dead_code)]
@@ -303,7 +303,7 @@ mod tests {
             control.set(0b00000000);
             assert_eq!(EightByEight, control.sprite_size());
             control.set(0b00100000);
-            assert_eq!(SixteenBySixteen, control.sprite_size());
+            assert_eq!(EightBySixteen, control.sprite_size());
         }
 
         #[test]
