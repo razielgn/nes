@@ -4,7 +4,7 @@ use nes::Rom;
 
 #[test]
 fn nestest_decode() {
-    let rom = Rom::from_path("tests/roms/nestest.nes");
+    let rom = Rom::from_buf(include_bytes!("roms/nestest.nes"));
 
     assert_eq!(0, rom.flags_6);
     assert_eq!(0, rom.flags_7);

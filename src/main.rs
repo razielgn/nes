@@ -8,7 +8,7 @@ fn main() {
     env_logger::init();
 
     let path = env::args().nth(1).unwrap();
-    let mut nes = Nes::from_rom(path);
+    let mut nes = Nes::from_path(path);
 
     loop {
         let debug_state = nes.debug_step();

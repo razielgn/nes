@@ -41,8 +41,16 @@ macro_rules! mut_memory {
 }
 
 impl Nes {
-    pub fn from_rom<P: AsRef<Path>>(path: P) -> Self {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let rom = Rom::from_path(path);
+        Nes::from_rom(rom)
+    }
+
+    pub fn from_buf(buf: &[u8]) -> Self {
+        Nes::from_rom(Rom::from_buf(buf))
+    }
+
+    pub fn from_rom(rom: Rom) -> Self {
         let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
 

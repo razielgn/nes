@@ -2,6 +2,12 @@ extern crate nes;
 
 use nes::{Access, Cycles, Nes};
 
+macro_rules! run {
+    ($path:expr) => {
+        run_test_rom(include_bytes!($path));
+    };
+}
+
 /// Tests generally print information on screen, but also output information
 /// in other ways, in case the PPU doesn't work or there isn't one, as in an
 /// NSF or a NES emulator early in development.
@@ -28,93 +34,93 @@ mod instr_test_v5 {
 
     #[test]
     fn basics() {
-        run_test_rom("instr_test_v5/01-basics");
+        run!("roms/instr_test_v5/01-basics.nes");
     }
 
     #[test]
     fn implied() {
-        run_test_rom("instr_test_v5/02-implied");
+        run!("roms/instr_test_v5/02-implied.nes");
     }
 
     #[test]
     fn immediate() {
-        run_test_rom("instr_test_v5/03-immediate");
+        run!("roms/instr_test_v5/03-immediate.nes");
     }
 
     #[test]
     fn zero_page() {
-        run_test_rom("instr_test_v5/04-zero_page");
+        run!("roms/instr_test_v5/04-zero_page.nes");
     }
 
     #[test]
     fn zp_xy() {
-        run_test_rom("instr_test_v5/05-zp_xy");
+        run!("roms/instr_test_v5/05-zp_xy.nes");
     }
 
     #[test]
     fn absolute() {
-        run_test_rom("instr_test_v5/06-absolute");
+        run!("roms/instr_test_v5/06-absolute.nes");
     }
 
     #[test]
     fn abs_xy() {
-        run_test_rom("instr_test_v5/07-abs_xy");
+        run!("roms/instr_test_v5/07-abs_xy.nes");
     }
 
     #[test]
     fn ind_x() {
-        run_test_rom("instr_test_v5/08-ind_x");
+        run!("roms/instr_test_v5/08-ind_x.nes");
     }
 
     #[test]
     fn ind_y() {
-        run_test_rom("instr_test_v5/09-ind_y");
+        run!("roms/instr_test_v5/09-ind_y.nes");
     }
 
     #[test]
     fn branches() {
-        run_test_rom("instr_test_v5/10-branches");
+        run!("roms/instr_test_v5/10-branches.nes");
     }
 
     #[test]
     #[ignore]
     fn stack() {
-        run_test_rom("instr_test_v5/11-stack");
+        run!("roms/instr_test_v5/11-stack.nes");
     }
 
     #[test]
     fn jmp_jsr() {
-        run_test_rom("instr_test_v5/12-jmp_jsr");
+        run!("roms/instr_test_v5/12-jmp_jsr.nes");
     }
 
     #[test]
     fn rts() {
-        run_test_rom("instr_test_v5/13-rts");
+        run!("roms/instr_test_v5/13-rts.nes");
     }
 
     #[test]
     fn rti() {
-        run_test_rom("instr_test_v5/14-rti");
+        run!("roms/instr_test_v5/14-rti.nes");
     }
 
     #[test]
     fn brk() {
-        run_test_rom("instr_test_v5/15-brk");
+        run!("roms/instr_test_v5/15-brk.nes");
     }
 
     #[test]
     fn special() {
-        run_test_rom("instr_test_v5/16-special");
+        run!("roms/instr_test_v5/16-special.nes");
     }
 
     #[test]
     fn all_instrs() {
-        run_test_rom("instr_test_v5/all_instrs");
+        run!("roms/instr_test_v5/all_instrs.nes");
     }
 
     #[test]
     fn official_only() {
-        run_test_rom("instr_test_v5/official_only");
+        run!("roms/instr_test_v5/official_only.nes");
     }
 }
 
@@ -164,7 +170,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn cli_latency() {
-        run_test_rom("cpu_interrupts_v2/cli_latency");
+        run!("roms/cpu_interrupts_v2/cli_latency.nes");
     }
 
     /// NMI behavior when it interrupts BRK. Occasionally fails on
@@ -186,7 +192,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn nmi_and_brk() {
-        run_test_rom("cpu_interrupts_v2/nmi_and_brk");
+        run!("roms/cpu_interrupts_v2/nmi_and_brk.nes");
     }
 
     /// NMI behavior when it interrupts IRQ vectoring.
@@ -209,7 +215,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn nmi_and_irq() {
-        run_test_rom("cpu_interrupts_v2/nmi_and_irq");
+        run!("roms/cpu_interrupts_v2/nmi_and_irq.nes");
     }
 
     /// Has IRQ occur at various times around sprite DMA.
@@ -240,7 +246,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn irq_and_dma() {
-        run_test_rom("cpu_interrupts_v2/irq_and_dma");
+        run!("roms/cpu_interrupts_v2/irq_and_dma.nes");
     }
 
     /// A taken non-page-crossing branch ignores IRQ during
@@ -305,7 +311,7 @@ mod cpu_interrupts_v2 {
     #[test]
     #[ignore]
     fn branch_delays_irq() {
-        run_test_rom("cpu_interrupts_v2/branch_delays_irq");
+        run!("roms/cpu_interrupts_v2/branch_delays_irq.nes");
     }
 }
 
@@ -319,14 +325,14 @@ mod instr_misc {
     /// Verifies that $FFFF wraps around to 0 for STA abs,X and LDA abs,X.
     #[test]
     fn abs_x_wrap() {
-        run_test_rom("instr_misc/abs_x_wrap");
+        run!("roms/instr_misc/abs_x_wrap.nes");
     }
 
     /// Verifies that branching past end or before beginning of RAM wraps
     /// around.
     #[test]
     fn branch_wrap() {
-        run_test_rom("instr_misc/branch_wrap");
+        run!("roms/instr_misc/branch_wrap.nes");
     }
 
     /// Tests some instructions that do dummy reads before the real read/write.
@@ -340,7 +346,7 @@ mod instr_misc {
     /// ROL ABS,X always
     #[test]
     fn dummy_reads() {
-        run_test_rom("instr_misc/dummy_reads");
+        run!("roms/instr_misc/dummy_reads.nes");
     }
 
     /// Tests dummy reads for (hopefully) ALL instructions which do them,
@@ -349,7 +355,7 @@ mod instr_misc {
     #[test]
     #[ignore]
     fn dummy_reads_apu() {
-        run_test_rom("instr_misc/dummy_reads_apu");
+        run!("roms/instr_misc/dummy_reads_apu.nes");
     }
 }
 
@@ -371,13 +377,13 @@ mod instr_timing {
     #[test]
     #[ignore]
     fn instr_timing() {
-        run_test_rom("instr_timing/instr_timing");
+        run!("roms/instr_timing/instr_timing.nes");
     }
 
     #[test]
     #[ignore]
     fn branch_timing() {
-        run_test_rom("instr_timing/branch_timing");
+        run!("roms/instr_timing/branch_timing.nes");
     }
 }
 
@@ -389,20 +395,20 @@ mod cpu_reset {
     #[test]
     #[ignore]
     fn registers() {
-        run_test_rom("cpu_reset/registers");
+        run!("roms/cpu_reset/registers.nes");
     }
 
     /// Verifies that reset doesn't alter any RAM.
     #[test]
     fn ram_after_reset() {
-        run_test_rom("cpu_reset/ram_after_reset");
+        run!("roms/cpu_reset/ram_after_reset.nes");
     }
 }
 
 const RESET_DELAY: Cycles = 310_000;
 
-fn run_test_rom(name: &str) {
-    let mut nes = Nes::from_rom(format!("tests/roms/{}.nes", name));
+fn run_test_rom(buf: &[u8]) {
+    let mut nes = Nes::from_buf(buf);
     let mut reset_delay: Option<Cycles> = None;
 
     loop {
