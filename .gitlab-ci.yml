@@ -9,7 +9,7 @@ cache:
   script:
   - rustc --version && cargo --version
   - cargo build
-  - cargo test --verbose
+  - cargo test --verbose --release
 
 variables:
   RUST_BACKTRACE: "FULL"
