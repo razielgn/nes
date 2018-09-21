@@ -22,3 +22,6 @@ env_logger = "*"
 
 [dev-dependencies]
 env_logger = "*"
+
+[profile.dev]
+opt-level = 1
