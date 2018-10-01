@@ -3,13 +3,29 @@ use self::SpriteSize::*;
 use self::VRamAddrIncr::*;
 use bits::BitOps;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Frame {
+    Even,
+    Odd,
+}
+
+impl Frame {
+    fn next(self) -> Self {
+        match self {
+            Frame::Even => Frame::Odd,
+            Frame::Odd => Frame::Even,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Ppu {
     control: Control,
     mask: Mask,
-    cycle: usize,
-    scanline: usize,
+    cycle: u16,
+    scanline: u16,
     vblank: bool,
+    frame: Frame,
 }
 
 impl Ppu {
@@ -20,6 +36,7 @@ impl Ppu {
             cycle: 0,
             scanline: 0,
             vblank: false,
+            frame: Frame::Even,
         }
     }
 
@@ -50,19 +67,14 @@ impl Ppu {
     }
 
     pub fn step(&mut self) -> bool {
-        debug!("state {:?}", self);
+        trace!(
+            "step cycle {:3}, scanline {:3}, frame {:4?}",
+            self.cycle,
+            self.scanline,
+            self.frame
+        );
+
         let mut nim = false;
-
-        self.cycle += 1;
-
-        if self.cycle == 341 {
-            self.cycle = 0;
-            self.scanline += 1;
-
-            if self.scanline == 262 {
-                self.scanline = 0;
-            }
-        }
 
         match (self.cycle, self.scanline) {
             (1, 241) => {
@@ -73,8 +85,28 @@ impl Ppu {
                     nim = true;
                 }
             }
-            (1, 261) => self.vblank = false,
+            (1, 261) => {
+                debug!("vblank ends");
+                self.vblank = false
+            }
             _ => (),
+        }
+
+        self.cycle += 1;
+
+        match (self.frame, self.cycle, self.scanline) {
+            (Frame::Even, 341, 261) | (Frame::Odd, 340, 261) => {
+                debug!("end of {:?} frame", self.frame);
+                self.cycle = 0;
+                self.scanline = 0;
+                self.frame = self.frame.next();
+            }
+            (_, 341, _) => {
+                debug!("end of scanline {}", self.scanline);
+                self.cycle = 0;
+                self.scanline += 1;
+            }
+            _ => {}
         }
 
         nim
@@ -343,7 +375,7 @@ mod tests {
         let mut ppu = Ppu::new();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..82182 {
+        for _ in 0..(341 * 241) + 2 {
             ppu.step();
         }
 
@@ -356,10 +388,38 @@ mod tests {
         let mut ppu = Ppu::new();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..89002 {
+        for _ in 0..(341 * 241) + 2 {
+            ppu.step();
+        }
+
+        assert!(ppu.read(0x2002).is_bit_set(7));
+
+        for _ in 0..(341 * 20) {
             ppu.step();
         }
 
         assert!(!ppu.read(0x2002).is_bit_set(7));
+    }
+
+    #[test]
+    fn odd_frames_are_shorter_by_one_cycle() {
+        let mut ppu = Ppu::new();
+        assert_eq!(Frame::Even, ppu.frame);
+
+        for _ in 0..341 * 262 {
+            ppu.step();
+        }
+
+        assert_eq!(0, ppu.scanline);
+        assert_eq!(0, ppu.cycle);
+        assert_eq!(Frame::Odd, ppu.frame);
+
+        for _ in 0..(341 * 262) - 1 {
+            ppu.step();
+        }
+
+        assert_eq!(0, ppu.scanline);
+        assert_eq!(0, ppu.cycle);
+        assert_eq!(Frame::Even, ppu.frame);
     }
 }
