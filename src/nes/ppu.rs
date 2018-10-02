@@ -66,6 +66,20 @@ pub struct Ppu {
 
     /// $2004 r/w
     oam_ram: [u8; 256],
+
+    /// $2005 w x2
+    scroll: u8,
+
+    /// $2006 w x2
+    /// yyy NN YYYYY XXXXX
+    /// ||| || ||||| +++++-- coarse X scroll
+    /// ||| || +++++-------- coarse Y scroll
+    /// ||| ++-------------- nametable select
+    /// +++----------------- fine Y scroll
+    vram_addr: u16,
+    temp_vram_addr: u16,
+
+    write_toggle: bool,
 }
 
 impl Ppu {
@@ -79,6 +93,10 @@ impl Ppu {
             frame: Frame::Even,
             oam_addr: 0,
             oam_ram: [0; 256],
+            scroll: 0,
+            vram_addr: 0,
+            temp_vram_addr: 0,
+            write_toggle: false,
         }
     }
 
@@ -104,10 +122,12 @@ impl Ppu {
 
     pub fn write(&mut self, addr: u16, val: u8) {
         match 0x2000 + (addr % 8) {
-            0x2000 => self.control.set(val),
+            0x2000 => self.write_to_control(val),
             0x2001 => self.mask.set(val),
             0x2003 => self.oam_addr = val,
             0x2004 => self.write_to_oam(val),
+            0x2005 => self.write_to_scroll(val),
+            0x2006 => self.write_to_addr(val),
             _ => (),
         }
     }
@@ -185,6 +205,7 @@ impl Ppu {
     ///            pre-render line.
     pub fn status(&mut self) -> u8 {
         let mut status = self.control.as_u8() & 0x1F;
+        self.write_toggle = false;
 
         if self.vblank {
             status.set_bit(7);
@@ -203,6 +224,50 @@ impl Ppu {
         }
 
         status
+    }
+
+    fn write_to_control(&mut self, val: u8) {
+        // t: ...BA.. ........ = d: ......BA
+        self.temp_vram_addr &= !0b000_1100_0000_0000;
+        self.temp_vram_addr |= (u16::from(val) & 0b11) << 10;
+
+        self.control.set(val);
+    }
+
+    fn write_to_scroll(&mut self, val: u8) {
+        if !self.write_toggle {
+            // t: ... .... ...H GFED = d: HGFE D...
+            // x:                CBA = d: .... .CBA
+            self.temp_vram_addr &= !0b000_0000_0001_1111;
+            self.temp_vram_addr |= (u16::from(val) & 0b1111_1000) >> 3;
+            self.scroll = val & 0b111;
+        } else {
+            // t: CBA ..HG FED. .... = d: HGFE DCBA
+            self.temp_vram_addr &= !0b111_0011_1110_0000;
+            self.temp_vram_addr |= (u16::from(val) & 0b0000_0111) << 12;
+            self.temp_vram_addr |= (u16::from(val) & 0b0011_1000) << 2;
+            self.temp_vram_addr |= (u16::from(val) & 0b1100_0000) << 2;
+        }
+
+        self.write_toggle = !self.write_toggle;
+    }
+
+    fn write_to_addr(&mut self, val: u8) {
+        if !self.write_toggle {
+            // t: .FE DCBA .... .... = d: ..FE DCBA
+            // t: X.. .... .... .... = 0
+            self.temp_vram_addr &= !0b011_1111_0000_0000;
+            self.temp_vram_addr |= (u16::from(val) & 0b11_1111) << 8;
+            self.temp_vram_addr &= !0b100_0000_0000_0000;
+        } else {
+            // t: ... .... HGFE DCBA = d: HGFE DCBA
+            // v                     = t
+            self.temp_vram_addr &= !0b000_0000_1111_1111;
+            self.temp_vram_addr |= u16::from(val);
+            self.vram_addr = self.temp_vram_addr;
+        }
+
+        self.write_toggle = !self.write_toggle;
     }
 
     fn read_from_oam(&self) -> u8 {
@@ -539,5 +604,41 @@ mod tests {
 
         ppu.write(0x2003, 0x03);
         assert_eq!(0xFC, ppu.mut_read(0x2004));
+    }
+
+    /// https://wiki.nesdev.com/w/index.php?title=PPU_scrolling#Register_controls
+    #[test]
+    fn scroll_and_addr_write_example() {
+        let mut ppu = Ppu::new();
+
+        // $2000 write
+        ppu.write(0x2000, 0b0000_0011);
+        assert_eq!(0b000_1100_0000_0000, ppu.temp_vram_addr);
+
+        // $2002 read
+        ppu.mut_read(0x2002);
+        assert_eq!(false, ppu.write_toggle);
+
+        // $2005 first write (w is 0)
+        ppu.write(0x2005, 0b1010_1101);
+        assert_eq!(0b000_1100_0001_0101, ppu.temp_vram_addr);
+        assert_eq!(0b101, ppu.scroll);
+        assert_eq!(true, ppu.write_toggle);
+
+        // $2005 second write (w is 1)j
+        ppu.write(0x2005, 0b1110_1101);
+        assert_eq!(0b101_1111_1011_0101, ppu.temp_vram_addr);
+        assert_eq!(false, ppu.write_toggle);
+
+        // $2006 first write (w is 0)
+        ppu.write(0x2006, 0b0010_1010);
+        assert_eq!(0b010_1010_1011_0101, ppu.temp_vram_addr);
+        assert_eq!(true, ppu.write_toggle);
+
+        // $2006 second write (w is 1)
+        ppu.write(0x2006, 0b0100_1010);
+        assert_eq!(0b010_1010_0100_1010, ppu.temp_vram_addr);
+        assert_eq!(ppu.vram_addr, ppu.temp_vram_addr);
+        assert_eq!(false, ppu.write_toggle);
     }
 }
