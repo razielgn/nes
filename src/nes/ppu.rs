@@ -18,7 +18,7 @@ impl Frame {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Ppu {
     control: Control,
     mask: Mask,
@@ -26,6 +26,8 @@ pub struct Ppu {
     scanline: u16,
     vblank: bool,
     frame: Frame,
+    oam_addr: u8,
+    oam_ram: [u8; 256],
 }
 
 impl Ppu {
@@ -37,6 +39,8 @@ impl Ppu {
             scanline: 0,
             vblank: false,
             frame: Frame::Even,
+            oam_addr: 0,
+            oam_ram: [0; 256],
         }
     }
 
@@ -45,6 +49,7 @@ impl Ppu {
             0x2000 => self.control.as_u8(),
             0x2001 => self.mask.as_u8(),
             0x2002 => self.status(),
+            0x2004 => self.read_from_oam(),
             _ => 0,
         }
     }
@@ -54,6 +59,7 @@ impl Ppu {
             0x2000 => self.control.as_u8(),
             0x2001 => self.mask.as_u8(),
             0x2002 => self.status_read_only(),
+            0x2004 => self.read_from_oam(),
             _ => 0,
         }
     }
@@ -62,6 +68,8 @@ impl Ppu {
         match 0x2000 + (addr % 8) {
             0x2000 => self.control.set(val),
             0x2001 => self.mask.set(val),
+            0x2003 => self.oam_addr = val,
+            0x2004 => self.write_to_oam(val),
             _ => (),
         }
     }
@@ -132,6 +140,32 @@ impl Ppu {
         }
 
         status
+    }
+
+    fn read_from_oam(&self) -> u8 {
+        self.oam_ram[self.oam_addr as usize]
+    }
+
+    fn write_to_oam(&mut self, mut val: u8) {
+        match self.scanline {
+            0...239 | 261 if self.is_rendering_enabled() => {
+                // TODO(low): glitchy OAM increment by bumping only the high 6 bits of OAMADDR.
+            }
+            _ => {
+                // The three unimplemented bits of each sprite's byte 2 do not exist
+                // in the PPU and always read back as 0 on PPU revisions that allow
+                // reading PPU OAM through OAMDATA ($2004).
+                if self.oam_addr & 0x03 == 0x02 {
+                    val &= 0xE3;
+                }
+                self.oam_ram[self.oam_addr as usize] = val;
+                self.oam_addr = self.oam_addr.wrapping_add(1);
+            }
+        }
+    }
+
+    fn is_rendering_enabled(&self) -> bool {
+        self.mask.show_background() || self.mask.show_sprites()
     }
 }
 
@@ -421,5 +455,26 @@ mod tests {
         assert_eq!(0, ppu.scanline);
         assert_eq!(0, ppu.cycle);
         assert_eq!(Frame::Even, ppu.frame);
+    }
+
+    #[test]
+    fn oam_write_and_read() {
+        let mut ppu = Ppu::new();
+        ppu.write(0x2004, 0xFF);
+        ppu.write(0x2004, 0xFE);
+        ppu.write(0x2004, 0xFD);
+        ppu.write(0x2004, 0xFC);
+
+        ppu.write(0x2003, 0x00);
+        assert_eq!(0xFF, ppu.mut_read(0x2004));
+
+        ppu.write(0x2003, 0x01);
+        assert_eq!(0xFE, ppu.mut_read(0x2004));
+
+        ppu.write(0x2003, 0x02);
+        assert_eq!(0xFD & 0xE3, ppu.mut_read(0x2004));
+
+        ppu.write(0x2003, 0x03);
+        assert_eq!(0xFC, ppu.mut_read(0x2004));
     }
 }

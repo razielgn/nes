@@ -405,6 +405,42 @@ mod cpu_reset {
     }
 }
 
+/// Tests OAM reading ($2004), being sure it reads the byte from OAM at the
+/// current address in $2003. It scans OAM from 0 to $FF, testing each byte
+/// in sequence. It prints a '-' where it reads back from the current
+/// address, and '*' where it doesn't. Each row represents 16 bytes of OAM,
+/// 16 rows total.
+#[test]
+fn oam_read() {
+    run!("roms/oam_read.nes");
+}
+
+/// Thoroughly tests OAM address ($2003) and read/write ($2004). On an NTSC
+/// NES, this passes only for one of the four random PPU-CPU
+/// synchronizations at power/reset. Test takes about 30 seconds, unless it
+/// fails.
+///
+/// This test randomly sets the address, then randomly either writes a
+/// random number of random bytes, or reads from the current address a
+/// random number of times and verifies that it matches what's expected. It
+/// does this for tens of seconds (refreshing OAM periodically so it doesn't
+/// fade). Once done, it verifies that all bytes in OAM match what's
+/// expected.
+///
+/// Expected behavior:
+///
+/// $2003 write sets OAM address.
+///
+/// $2004 write sets byte at current OAM address to byte written, then
+/// increments OAM address.
+///
+/// $2004 read gives byte at current OAM address, without modifying OAM
+/// address.
+#[test]
+fn oam_stress() {
+    run!("roms/oam_stress.nes");
+}
+
 const RESET_DELAY: Cycles = 310_000;
 
 fn run_test_rom(buf: &[u8]) {
