@@ -122,8 +122,9 @@ impl Ppu {
 
         let mut nim = false;
 
-        match (self.cycle, self.scanline) {
-            (1, 241) => {
+        match (self.scanline, self.cycle) {
+            // Vertical blanking lines
+            (241, 1) => {
                 debug!("vblank starts");
                 self.vblank = true;
 
@@ -131,7 +132,9 @@ impl Ppu {
                     nim = true;
                 }
             }
-            (1, 261) => {
+
+            // Pre-render scanline
+            (261, 1) => {
                 debug!("vblank ends");
                 self.vblank = false
             }
@@ -140,14 +143,14 @@ impl Ppu {
 
         self.cycle += 1;
 
-        match (self.frame, self.cycle, self.scanline) {
-            (Frame::Even, 341, 261) | (Frame::Odd, 340, 261) => {
+        match (self.frame, self.scanline, self.cycle) {
+            (Frame::Even, 261, 341) | (Frame::Odd, 261, 340) => {
                 debug!("end of {:?} frame", self.frame);
                 self.cycle = 0;
                 self.scanline = 0;
                 self.frame = self.frame.next();
             }
-            (_, 341, _) => {
+            (_, _, 341) => {
                 debug!("end of scanline {}", self.scanline);
                 self.cycle = 0;
                 self.scanline += 1;
