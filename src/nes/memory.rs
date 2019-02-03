@@ -14,7 +14,7 @@ pub trait MutAccess {
 
     fn mut_read_word_bug(&mut self, addr: u16) -> u16 {
         let lo = self.mut_read(addr);
-        let hi_addr = (addr & 0xff00) | u16::from((addr as u8).wrapping_add(1));
+        let hi_addr = (addr & 0xff00) | u16::from(addr.low().wrapping_add(1));
         let hi = self.mut_read(hi_addr);
         u16::from_hilo(hi, lo)
     }
@@ -40,7 +40,7 @@ pub trait Access {
     }
 
     fn read_multi(&self, addr: u16, bytes: u16) -> Vec<u8> {
-        (0u16..bytes)
+        (0_u16..bytes)
             .map(|i| self.read(addr.wrapping_add(i)))
             .collect()
     }

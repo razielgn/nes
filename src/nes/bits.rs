@@ -26,7 +26,7 @@ pub trait HighLowBits: Sized {
 
 impl HighLowBits for u16 {
     fn from_hilo(hi: u8, lo: u8) -> Self {
-        u16::from(hi) << 8 | u16::from(lo)
+        Self::from(hi) << 8 | Self::from(lo)
     }
 
     fn high(&self) -> u8 {

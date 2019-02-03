@@ -13,7 +13,7 @@ impl Mapper {
     pub fn new(rom: Rom) -> Self {
         let banks = rom.prg.len() / 0x4000;
 
-        Mapper {
+        Self {
             rom,
             banks,
             bank1: 0,

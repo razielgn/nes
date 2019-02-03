@@ -19,7 +19,7 @@ pub enum AddressingMode {
     IndirectIndexed(bool),
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 static OP_MODES: [AddressingMode; 256] = [
 //  0          1                       2          3                       4          5          6          7          8        9                 A            B                 C                 D                 E                 F
     Implied,   IndexedIndirect,        None,      IndexedIndirect,        ZeroPage,  ZeroPage,  ZeroPage,  ZeroPage,  Implied, Immediate,        Accumulator, Immediate,        Absolute,         Absolute,         Absolute,         Absolute,         // 0
@@ -41,7 +41,6 @@ static OP_MODES: [AddressingMode; 256] = [
 ];
 
 impl From<u8> for AddressingMode {
-    #[inline(always)]
     fn from(b: u8) -> Self {
         OP_MODES[b as usize]
     }
@@ -127,7 +126,7 @@ pub enum Label {
     XAA,
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 static OP_CODES: [Label; 256] = [
 //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
     BRK, ORA, KIL, SLO, NOP, ORA, ASL, SLO, PHP, ORA, ASL, ANC, NOP, ORA, ASL, SLO, // 0
@@ -149,7 +148,6 @@ static OP_CODES: [Label; 256] = [
 ];
 
 impl From<u8> for Label {
-    #[inline(always)]
     fn from(b: u8) -> Self {
         OP_CODES[b as usize]
     }

@@ -84,7 +84,7 @@ pub struct Ppu {
 
 impl Ppu {
     pub fn new() -> Self {
-        Ppu {
+        Self {
             control: Control::new(),
             mask: Mask::new(),
             cycle: 0,

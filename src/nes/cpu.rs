@@ -46,7 +46,7 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn new(pc: u16) -> Self {
-        let cpu = Cpu {
+        let cpu = Self {
             cycles: 0,
             pc,
             sp: 0xFD,
@@ -679,7 +679,6 @@ impl Cpu {
         mem.write(addr, val);
     }
 
-    #[inline(always)]
     fn inc_cycles(&mut self) {
         self.cycles += 1;
     }
@@ -809,7 +808,7 @@ impl Cpu {
     }
 
     fn push<M: MutAccess>(&mut self, val: u8, mem: &mut M) {
-        let addr = 0x100u16.wrapping_add(u16::from(self.sp));
+        let addr = 0x100_u16.wrapping_add(u16::from(self.sp));
         self.write(addr, val, mem);
         self.sp = self.sp.wrapping_sub(1);
     }
@@ -821,7 +820,7 @@ impl Cpu {
 
     fn pop<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         self.sp = self.sp.wrapping_add(1);
-        let addr = 0x100u16.wrapping_add(u16::from(self.sp));
+        let addr = 0x100_u16.wrapping_add(u16::from(self.sp));
         self.read(addr, mem)
     }
 

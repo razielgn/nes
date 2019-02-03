@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "cargo-clippy", allow(new_without_default))]
-
 #[macro_use]
 extern crate nom;
 #[macro_use]
@@ -43,18 +41,18 @@ macro_rules! mut_memory {
 impl Nes {
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let rom = Rom::from_path(path);
-        Nes::from_rom(rom)
+        Self::from_rom(rom)
     }
 
     pub fn from_buf(buf: &[u8]) -> Self {
-        Nes::from_rom(Rom::from_buf(buf))
+        Self::from_rom(Rom::from_buf(buf))
     }
 
     pub fn from_rom(rom: Rom) -> Self {
         let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
 
-        Nes {
+        Self {
             cpu: Cpu::new(pc),
             mapper,
             ppu: Ppu::new(),

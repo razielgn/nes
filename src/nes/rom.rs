@@ -18,16 +18,16 @@ pub struct Rom {
 impl Rom {
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let buf = fs::read(path).unwrap();
-        Rom::from_buf(&buf)
+        Self::from_buf(&buf)
     }
 
     pub fn from_buf(buf: &[u8]) -> Self {
-        let (_, rom) = Rom::parse(&buf).unwrap(); // TODO: error handling
+        let (_, rom) = Self::parse(&buf).unwrap(); // TODO: error handling
         rom
     }
 
     named!(
-        parse<Rom>,
+        parse<Self>,
         do_parse!(
             tag!("NES\x1A")
                 >> size_prg_rom: le_u8
@@ -44,7 +44,7 @@ impl Rom {
                     let lo_mapper = flags_6 & 0x0F;
                     let hi_mapper = flags_7 & 0x78;
 
-                    Rom {
+                    Self {
                         flags_6,
                         flags_7,
                         size_prg_ram: if size_prg_ram == 0 {
