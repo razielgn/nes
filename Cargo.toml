@@ -16,12 +16,9 @@ doc = false
 test = false
 
 [dependencies]
-nom = "4.0"
+nom = "4.2"
 log = "0.4"
-env_logger = "*"
-
-[dev-dependencies]
-env_logger = "*"
+env_logger = "0.6"
 
 [profile.dev]
 opt-level = 1
