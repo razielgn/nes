@@ -173,7 +173,11 @@ impl Ppu {
         self.cycle += 1;
 
         match (self.frame, self.scanline, self.cycle) {
-            (Frame::Even, 261, 341) | (Frame::Odd, 261, 340) => {
+            // On odd frames, with background enabled, skip one cycle.
+            (Frame::Odd, 0, 1) if self.mask.show_background() => {
+                self.cycle += 1;
+            }
+            (_, 261, 341) => {
                 debug!("end of {:?} frame", self.frame);
                 self.cycle = 0;
                 self.scanline = 0;
@@ -465,6 +469,7 @@ pub enum MasterSlaveSelect {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use std::iter;
 
     mod control {
         use super::super::*;
@@ -607,23 +612,42 @@ mod tests {
     #[test]
     fn odd_frames_are_shorter_by_one_cycle() {
         let mut ppu = Ppu::new();
-        assert_eq!(Frame::Even, ppu.frame);
+        ppu.write(0x2001, 0b0000_1000);
+        assert!(ppu.mask.show_background());
 
-        for _ in 0..341 * 262 {
-            ppu.step();
+        for (cycles, frame) in [89342, 89341]
+            .iter()
+            .cycle()
+            .zip([Frame::Even, Frame::Odd].iter().cycle())
+            .take(10)
+        {
+            assert_eq!(0, ppu.scanline);
+            assert_eq!(0, ppu.cycle);
+            assert_eq!(*frame, ppu.frame);
+
+            for _ in 0..*cycles {
+                ppu.step();
+            }
         }
+    }
 
-        assert_eq!(0, ppu.scanline);
-        assert_eq!(0, ppu.cycle);
-        assert_eq!(Frame::Odd, ppu.frame);
+    #[test]
+    fn all_frames_are_equal_when_bg_is_disabled() {
+        let mut ppu = Ppu::new();
+        assert!(!ppu.mask.show_background());
 
-        for _ in 0..(341 * 262) - 1 {
-            ppu.step();
+        for (cycles, frame) in iter::repeat(89342)
+            .zip([Frame::Even, Frame::Odd].iter().cycle())
+            .take(10)
+        {
+            assert_eq!(0, ppu.scanline);
+            assert_eq!(0, ppu.cycle);
+            assert_eq!(*frame, ppu.frame);
+
+            for _ in 0..cycles {
+                ppu.step();
+            }
         }
-
-        assert_eq!(0, ppu.scanline);
-        assert_eq!(0, ppu.cycle);
-        assert_eq!(Frame::Even, ppu.frame);
     }
 
     #[test]
