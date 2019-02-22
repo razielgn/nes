@@ -57,8 +57,8 @@ impl Nes {
         Self {
             cpu: Cpu::new(pc),
             mapper,
-            ppu: Ppu::new(),
-            ram: Ram::new(),
+            ppu: Ppu::default(),
+            ram: Ram::default(),
         }
     }
 

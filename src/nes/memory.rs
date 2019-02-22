@@ -51,11 +51,13 @@ const RAM_SIZE: usize = 0x2000;
 #[derive(Clone, Copy)]
 pub struct Ram([u8; RAM_SIZE]);
 
-impl Ram {
-    pub fn new() -> Self {
-        Ram([0; RAM_SIZE])
+impl Default for Ram {
+    fn default() -> Self {
+        Self([0; RAM_SIZE])
     }
+}
 
+impl Ram {
     pub fn read(&self, addr: u16) -> u8 {
         let addr = addr as usize;
 
@@ -148,7 +150,7 @@ mod test {
 
     #[test]
     fn ram_wraparound() {
-        let mut ram = Ram::new();
+        let mut ram = Ram::default();
         ram.write(0x0000u16, 0xFF);
 
         assert_eq!(0xFF, ram.read(0x0000u16));

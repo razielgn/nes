@@ -84,11 +84,11 @@ pub struct Ppu {
     write_toggle: bool,
 }
 
-impl Ppu {
-    pub fn new() -> Self {
+impl Default for Ppu {
+    fn default() -> Self {
         Self {
-            control: Control::new(),
-            mask: Mask::new(),
+            control: Control::default(),
+            mask: Mask::default(),
             cycle: 0,
             scanline: 0,
             vblank: false,
@@ -102,7 +102,9 @@ impl Ppu {
             write_toggle: false,
         }
     }
+}
 
+impl Ppu {
     pub fn mut_read(&mut self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus,
@@ -321,15 +323,11 @@ impl Ppu {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct Control(u8);
 
 #[allow(dead_code)]
 impl Control {
-    pub fn new() -> Self {
-        Control(0)
-    }
-
     pub fn set(&mut self, v: u8) {
         self.0 = v;
     }
@@ -394,15 +392,11 @@ impl Control {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct Mask(u8);
 
 #[allow(dead_code)]
 impl Mask {
-    pub fn new() -> Self {
-        Mask(0)
-    }
-
     pub fn set(&mut self, v: u8) {
         self.0 = v;
     }
@@ -476,7 +470,7 @@ mod tests {
 
         #[test]
         fn name_table_addr() {
-            let mut control = Control::new();
+            let mut control = Control::default();
 
             control.set(0b00000000);
             assert_eq!(0x2000, control.base_nametable_addr());
@@ -490,7 +484,7 @@ mod tests {
 
         #[test]
         fn vram_addr_incr() {
-            let mut control = Control::new();
+            let mut control = Control::default();
 
             control.set(0b00000000);
             assert_eq!(Add1GoingAcross, control.vram_addr_incr());
@@ -500,7 +494,7 @@ mod tests {
 
         #[test]
         fn sprite_pattern_table_addr() {
-            let mut control = Control::new();
+            let mut control = Control::default();
             control.set(0b00000000);
             assert_eq!(0x0000, control.sprite_pattern_table_addr());
             control.set(0b00001000);
@@ -509,7 +503,7 @@ mod tests {
 
         #[test]
         fn background_pattern_table_addr() {
-            let mut control = Control::new();
+            let mut control = Control::default();
             control.set(0b00000000);
             assert_eq!(0x0000, control.background_pattern_table_addr());
             control.set(0b00010000);
@@ -518,7 +512,7 @@ mod tests {
 
         #[test]
         fn sprite_size() {
-            let mut control = Control::new();
+            let mut control = Control::default();
             control.set(0b00000000);
             assert_eq!(EightByEight, control.sprite_size());
             control.set(0b00100000);
@@ -527,7 +521,7 @@ mod tests {
 
         #[test]
         fn master_slave_select() {
-            let mut control = Control::new();
+            let mut control = Control::default();
             control.set(0b00000000);
             assert_eq!(ReadBackdropFromExt, control.master_slave_select());
             control.set(0b01000000);
@@ -536,7 +530,7 @@ mod tests {
 
         #[test]
         fn nmi_at_next_vblank() {
-            let mut control = Control::new();
+            let mut control = Control::default();
             control.set(0b00000000);
             assert_eq!(false, control.nmi_at_next_vblank());
             control.set(0b10000000);
@@ -549,7 +543,7 @@ mod tests {
 
         #[test]
         fn grayscale() {
-            let mut mask = Mask::new();
+            let mut mask = Mask::default();
             mask.set(0b00000000);
             assert_eq!(false, mask.grayscale());
             mask.set(0b00000001);
@@ -559,7 +553,7 @@ mod tests {
 
     #[test]
     fn open_bus() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
 
         for offset in &[0u16, 1, 3, 4, 5, 6, 7] {
             let val = (*offset as u8) + 0xF0;
@@ -580,7 +574,7 @@ mod tests {
 
     #[test]
     fn vblank_has_started_and_reading_status_resets_it() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
         for _ in 0..(341 * 241) + 2 {
@@ -593,7 +587,7 @@ mod tests {
 
     #[test]
     fn vblank_has_ended() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
         for _ in 0..(341 * 241) + 2 {
@@ -611,7 +605,7 @@ mod tests {
 
     #[test]
     fn odd_frames_are_shorter_by_one_cycle() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
         ppu.write(0x2001, 0b0000_1000);
         assert!(ppu.mask.show_background());
 
@@ -633,7 +627,7 @@ mod tests {
 
     #[test]
     fn all_frames_are_equal_when_bg_is_disabled() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
         assert!(!ppu.mask.show_background());
 
         for (cycles, frame) in iter::repeat(89342)
@@ -652,7 +646,7 @@ mod tests {
 
     #[test]
     fn oam_write_and_read() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
         ppu.write(0x2004, 0xFF);
         ppu.write(0x2004, 0xFE);
         ppu.write(0x2004, 0xFD);
@@ -674,7 +668,7 @@ mod tests {
     /// https://wiki.nesdev.com/w/index.php?title=PPU_scrolling#Register_controls
     #[test]
     fn scroll_and_addr_write_example() {
-        let mut ppu = Ppu::new();
+        let mut ppu = Ppu::default();
 
         // $2000 write
         ppu.write(0x2000, 0b0000_0011);
