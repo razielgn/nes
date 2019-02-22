@@ -841,7 +841,6 @@ fn is_page_crossed(a: u16, b: u16) -> bool {
     a.wrapping_add(b) & 0xFF00 != a & 0xFF00
 }
 
-#[allow(dead_code)]
 enum Status {
     CarryFlag = 0,
     ZeroFlag = 1,

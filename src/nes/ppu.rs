@@ -320,7 +320,6 @@ impl Ppu {
 #[derive(Debug, Clone, Copy, Default)]
 struct Status(u8);
 
-#[allow(dead_code)]
 impl Status {
     pub fn as_u8(self) -> u8 {
         self.0
@@ -346,10 +345,6 @@ struct Control(u8);
 impl Control {
     pub fn set(&mut self, v: u8) {
         self.0 = v;
-    }
-
-    pub fn as_u8(self) -> u8 {
-        self.0
     }
 
     pub fn base_nametable_addr(self) -> u16 {
@@ -417,10 +412,6 @@ impl Mask {
         self.0 = v;
     }
 
-    pub fn as_u8(self) -> u8 {
-        self.0
-    }
-
     pub fn grayscale(self) -> bool {
         self.0.is_bit_set(0)
     }
@@ -454,21 +445,18 @@ impl Mask {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum VRamAddrIncr {
     Add1GoingAcross,
     Add32GoingDown,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum SpriteSize {
     EightByEight,
     EightBySixteen,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub enum MasterSlaveSelect {
     ReadBackdropFromExt,
