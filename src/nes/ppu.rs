@@ -22,7 +22,6 @@ impl Frame {
 pub struct Ppu {
     scanline: u16,
     cycle: u16,
-    vblank: bool,
     frame: Frame,
 
     /// $2000 w
@@ -61,6 +60,30 @@ pub struct Ppu {
     /// +--------- Emphasize blue*
     mask: Mask,
 
+    /// $2002
+    ///
+    /// 7  bit  0
+    /// ---- ----
+    /// VSO. ....
+    /// |||| ||||
+    /// |||+-++++- Least significant bits previously written into a PPU register
+    /// |||        (due to register not being updated for this address)
+    /// ||+------- Sprite overflow. The intent was for this flag to be set
+    /// ||         whenever more than eight sprites appear on a scanline, but a
+    /// ||         hardware bug causes the actual behavior to be more complicated
+    /// ||         and generate false positives as well as false negatives; see
+    /// ||         PPU sprite evaluation. This flag is set during sprite
+    /// ||         evaluation and cleared at dot 1 (the second dot) of the
+    /// ||         pre-render line.
+    /// |+-------- Sprite 0 Hit.  Set when a nonzero pixel of sprite 0 overlaps
+    /// |          a nonzero background pixel; cleared at dot 1 of the pre-render
+    /// |          line.  Used for raster timing.
+    /// +--------- Vertical blank has started (0: not in vblank; 1: in vblank).
+    ///            Set at dot 1 of line 241 (the line *after* the post-render
+    ///            line); cleared after reading $2002 and at dot 1 of the
+    ///            pre-render line.
+    status: Status,
+
     /// $2003 w
     oam_addr: u8,
 
@@ -87,11 +110,11 @@ pub struct Ppu {
 impl Default for Ppu {
     fn default() -> Self {
         Self {
+            status: Status::default(),
             control: Control::default(),
             mask: Mask::default(),
             cycle: 0,
             scanline: 0,
-            vblank: false,
             frame: Frame::Even,
             oam_addr: 0,
             oam_ram: [0; 256],
@@ -157,7 +180,7 @@ impl Ppu {
             // Vertical blanking lines
             (241, 1) => {
                 debug!("vblank starts");
-                self.vblank = true;
+                self.status.set_vblank();
 
                 if self.control.nmi_at_next_vblank() {
                     nim = true;
@@ -167,7 +190,7 @@ impl Ppu {
             // Pre-render scanline
             (261, 1) => {
                 debug!("vblank ends");
-                self.vblank = false
+                self.status.clear_vblank();
             }
             _ => (),
         }
@@ -196,37 +219,15 @@ impl Ppu {
         nim
     }
 
-    /// $2002
-    ///
-    /// 7  bit  0
-    /// ---- ----
-    /// VSO. ....
-    /// |||| ||||
-    /// |||+-++++- Least significant bits previously written into a PPU register
-    /// |||        (due to register not being updated for this address)
-    /// ||+------- Sprite overflow. The intent was for this flag to be set
-    /// ||         whenever more than eight sprites appear on a scanline, but a
-    /// ||         hardware bug causes the actual behavior to be more complicated
-    /// ||         and generate false positives as well as false negatives; see
-    /// ||         PPU sprite evaluation. This flag is set during sprite
-    /// ||         evaluation and cleared at dot 1 (the second dot) of the
-    /// ||         pre-render line.
-    /// |+-------- Sprite 0 Hit.  Set when a nonzero pixel of sprite 0 overlaps
-    /// |          a nonzero background pixel; cleared at dot 1 of the pre-render
-    /// |          line.  Used for raster timing.
-    /// +--------- Vertical blank has started (0: not in vblank; 1: in vblank).
-    ///            Set at dot 1 of line 241 (the line *after* the post-render
-    ///            line); cleared after reading $2002 and at dot 1 of the
-    ///            pre-render line.
     fn status(&mut self) -> u8 {
-        let mut status = self.control.as_u8() & 0b1110_0000;
-        self.write_toggle = false;
+        let status = self.status.as_u8();
 
-        if self.vblank {
-            status.set_bit(7);
-            self.vblank = false;
+        if self.status.is_vblank_set() {
+            self.status.clear_vblank();
             debug!("vblank reset");
         }
+
+        self.write_toggle = false;
 
         let prev_open_bus = self.open_bus;
         self.open_bus &= 0b0001_1111;
@@ -236,13 +237,7 @@ impl Ppu {
     }
 
     fn status_read_only(&self) -> u8 {
-        let mut status = self.control.as_u8() & 0b1110_0000;
-
-        if self.vblank {
-            status.set_bit(7);
-        }
-
-        status | (self.open_bus & 0b0001_1111)
+        self.status.as_u8() | (self.open_bus & 0b0001_1111)
     }
 
     fn write_to_control(&mut self, val: u8) {
@@ -322,7 +317,28 @@ impl Ppu {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct Status(u8);
+
 #[allow(dead_code)]
+impl Status {
+    pub fn as_u8(self) -> u8 {
+        self.0
+    }
+
+    pub fn is_vblank_set(self) -> bool {
+        self.0.get_bit(7) == 1
+    }
+
+    pub fn set_vblank(&mut self) {
+        self.0.set_bit(7);
+    }
+
+    pub fn clear_vblank(&mut self) {
+        self.0.clear_bit(7)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct Control(u8);
 
@@ -566,10 +582,10 @@ mod tests {
         }
 
         ppu.write(0x2001, 0b0101_1010);
-        ppu.control.set(0b1010_0000);
-        assert_eq!("10111010", ppu.read(0x2002).to_bitstring());
-        assert_eq!("10111010", ppu.mut_read(0x2002).to_bitstring());
-        assert_eq!("10111010", ppu.read(0x2000).to_bitstring());
+        ppu.status.set_vblank();
+        assert_eq!("10011010", ppu.read(0x2002).to_bitstring());
+        assert_eq!("10011010", ppu.mut_read(0x2002).to_bitstring());
+        assert_eq!("10011010", ppu.read(0x2000).to_bitstring());
     }
 
     #[test]
