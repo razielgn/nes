@@ -464,6 +464,7 @@ pub enum MasterSlaveSelect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     mod control {
         use super::super::*;

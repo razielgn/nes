@@ -2,6 +2,8 @@
 extern crate nom;
 #[macro_use]
 extern crate log;
+#[cfg(test)]
+extern crate pretty_assertions;
 
 mod bits;
 mod cpu;
