@@ -1,9 +1,15 @@
-pub trait BitOps: Copy {
+use std::fmt;
+
+pub trait BitOps: Copy + fmt::Binary {
     fn set_bit(&mut self, i: u8);
     fn get_bit(&self, i: u8) -> u8;
 
     fn is_bit_set(&self, i: u8) -> bool {
         self.get_bit(i) == 1
+    }
+
+    fn to_bitstring(&self) -> String {
+        format!("{:08b}", self)
     }
 }
 

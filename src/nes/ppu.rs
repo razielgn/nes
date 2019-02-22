@@ -79,6 +79,8 @@ pub struct Ppu {
     vram_addr: u16,
     temp_vram_addr: u16,
 
+    open_bus: u8,
+
     write_toggle: bool,
 }
 
@@ -96,39 +98,46 @@ impl Ppu {
             scroll: 0,
             vram_addr: 0,
             temp_vram_addr: 0,
+            open_bus: 0,
             write_toggle: false,
         }
     }
 
     pub fn mut_read(&mut self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
-            0x2000 => self.control.as_u8(),
-            0x2001 => self.mask.as_u8(),
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus,
             0x2002 => self.status(),
-            0x2004 => self.read_from_oam(),
-            _ => 0,
+            0x2004 => self.mut_read_from_oam(),
+            0x2007 => 0, // TODO: unimplemented (+ (low) open bus).
+            _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
         }
     }
 
     pub fn read(&self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
-            0x2000 => self.control.as_u8(),
-            0x2001 => self.mask.as_u8(),
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus,
             0x2002 => self.status_read_only(),
             0x2004 => self.read_from_oam(),
-            _ => 0,
+            0x2007 => 0,         // TODO: unimplemented.
+            _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
         }
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
+        if 0x2000 + (addr % 8) != 0x2002 {
+            self.open_bus = val;
+        }
+
         match 0x2000 + (addr % 8) {
             0x2000 => self.write_to_control(val),
             0x2001 => self.mask.set(val),
+            0x2002 => (),
             0x2003 => self.oam_addr = val,
             0x2004 => self.write_to_oam(val),
             0x2005 => self.write_to_scroll(val),
             0x2006 => self.write_to_addr(val),
-            _ => (),
+            0x2007 => (),        // TODO: unimplemented.
+            _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
         }
     }
 
@@ -203,8 +212,8 @@ impl Ppu {
     ///            Set at dot 1 of line 241 (the line *after* the post-render
     ///            line); cleared after reading $2002 and at dot 1 of the
     ///            pre-render line.
-    pub fn status(&mut self) -> u8 {
-        let mut status = self.control.as_u8() & 0x1F;
+    fn status(&mut self) -> u8 {
+        let mut status = self.control.as_u8() & 0b1110_0000;
         self.write_toggle = false;
 
         if self.vblank {
@@ -213,17 +222,21 @@ impl Ppu {
             debug!("vblank reset");
         }
 
-        status
+        let prev_open_bus = self.open_bus;
+        self.open_bus &= 0b0001_1111;
+        self.open_bus |= status;
+
+        status | (prev_open_bus & 0b0001_1111)
     }
 
-    pub fn status_read_only(&self) -> u8 {
-        let mut status = self.control.as_u8() & 0x1F;
+    fn status_read_only(&self) -> u8 {
+        let mut status = self.control.as_u8() & 0b1110_0000;
 
         if self.vblank {
             status.set_bit(7);
         }
 
-        status
+        status | (self.open_bus & 0b0001_1111)
     }
 
     fn write_to_control(&mut self, val: u8) {
@@ -268,6 +281,12 @@ impl Ppu {
         }
 
         self.write_toggle = !self.write_toggle;
+    }
+
+    fn mut_read_from_oam(&mut self) -> u8 {
+        let oam = self.read_from_oam();
+        self.open_bus = oam;
+        oam
     }
 
     fn read_from_oam(&self) -> u8 {
@@ -530,6 +549,27 @@ mod tests {
             mask.set(0b00000001);
             assert_eq!(true, mask.grayscale());
         }
+    }
+
+    #[test]
+    fn open_bus() {
+        let mut ppu = Ppu::new();
+
+        for offset in &[0u16, 1, 3, 4, 5, 6, 7] {
+            let val = (*offset as u8) + 0xF0;
+            ppu.write(0x2000 + offset, val);
+
+            for offset2 in &[0u16, 1, 3, 5, 6] {
+                let addr = 0x2000 + offset2;
+                assert_eq!(val.to_bitstring(), ppu.read(addr).to_bitstring());
+            }
+        }
+
+        ppu.write(0x2001, 0b0101_1010);
+        ppu.control.set(0b1010_0000);
+        assert_eq!("10111010", ppu.read(0x2002).to_bitstring());
+        assert_eq!("10111010", ppu.mut_read(0x2002).to_bitstring());
+        assert_eq!("10111010", ppu.read(0x2000).to_bitstring());
     }
 
     #[test]
