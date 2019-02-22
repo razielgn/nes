@@ -896,7 +896,7 @@ impl P {
     }
 
     fn unset(&mut self, s: Status) {
-        self.0 &= !(1 << (s as u8));
+        self.0.clear_bit(s as u8);
     }
 
     fn is_set(self, s: Status) -> bool {
