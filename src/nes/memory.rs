@@ -59,21 +59,11 @@ impl Default for Ram {
 
 impl Ram {
     pub fn read(&self, addr: u16) -> u8 {
-        let addr = addr as usize;
-
-        match addr {
-            0x0000...0x1FFF => self.0[addr % 0x0800],
-            _ => unimplemented!(),
-        }
+        self.0[(addr % 0x0800) as usize]
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
-        let addr = addr as usize;
-
-        match addr {
-            0x0000...0x1FFF => self.0[addr % 0x0800] = val,
-            _ => unimplemented!(),
-        }
+        self.0[(addr % 0x0800) as usize] = val;
     }
 }
 
