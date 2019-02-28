@@ -481,6 +481,27 @@ mod ppu_vbl_nmi {
         run!("roms/ppu_vbl_nmi/vbl_basics.nes");
     }
 
+    /// Verifies time VBL flag is set.
+    ///
+    /// Reads $2002 twice and prints VBL flags from
+    /// them. Test is run one PPU clock later each time,
+    /// around the time the flag is set.
+    ///
+    /// 00 - V
+    /// 01 - V
+    /// 02 - V
+    /// 03 - V   ; after some resets this is - -
+    /// 04 - -   ; flag setting is suppressed
+    /// 05 V -
+    /// 06 V -
+    /// 07 V -
+    /// 08 V -
+    #[test]
+    #[ignore]
+    fn vbl_set_time() {
+        run!("roms/ppu_vbl_nmi/vbl_set_time.nes");
+    }
+
     /// Tests time VBL flag is cleared.
     ///
     /// Reads $2002 and prints VBL flag.
@@ -499,6 +520,112 @@ mod ppu_vbl_nmi {
     #[test]
     fn vbl_clear_time() {
         run!("roms/ppu_vbl_nmi/vbl_clear_time.nes");
+    }
+
+    /// Tests immediate NMI behavior when enabling while VBL flag is already set
+    ///
+    /// 2) Shouldn't occur when disabled
+    /// 3) Should occur when enabled and VBL begins
+    /// 4) $2000 should be mirrored every 8 bytes
+    /// 5) Should occur immediately if enabled while VBL flag is set
+    /// 6) Shouldn't occur if enabled while VBL flag is clear
+    /// 7) Shouldn't occur again if writing $80 when already enabled
+    /// 8) Shouldn't occur again if writing $80 when already enabled 2
+    /// 9) Should occur again if enabling after disabled
+    /// 10) Should occur again if enabling after disabled 2
+    /// 11) Immediate occurence should be after NEXT instruction
+    #[test]
+    #[ignore]
+    fn nmi_control() {
+        run!("roms/ppu_vbl_nmi/nmi_control.nes");
+    }
+
+    /// Tests NMI timing.
+    ///
+    /// Prints which instruction NMI occurred
+    /// after. Test is run one PPU clock later
+    /// each line.
+    ///
+    /// 00 4
+    /// 01 4
+    /// 02 4
+    /// 03 3
+    /// 04 3
+    /// 05 3
+    /// 06 3
+    /// 07 3
+    /// 08 3
+    /// 09 2
+    #[test]
+    #[ignore]
+    fn nmi_timing() {
+        run!("roms/ppu_vbl_nmi/nmi_timing.nes");
+    }
+
+    /// Tests behavior when $2002 is read near time
+    /// VBL flag is set.
+    ///
+    /// Reads $2002 one PPU clock later each time.
+    /// Prints whether VBL flag read back as set, and
+    /// whether NMI occurred.
+    ///
+    /// 00 - N
+    /// 01 - N
+    /// 02 - N
+    /// 03 - N  ; normal behavior
+    /// 04 - -  ; flag never set, no NMI
+    /// 05 V -  ; flag read back as set, but no NMI
+    /// 06 V -
+    /// 07 V N  ; normal behavior
+    /// 08 V N
+    /// 09 V N
+    #[test]
+    #[ignore]
+    fn suppression() {
+        run!("roms/ppu_vbl_nmi/suppression.nes");
+    }
+
+    /// Tests NMI occurrence when enabled near time
+    /// VBL flag is cleared.
+    ///
+    /// Enables NMI one PPU clock later on each line.
+    /// Prints whether NMI occurred.
+    ///
+    /// 00 N
+    /// 01 N
+    /// 02 N
+    /// 03 N
+    /// 04 N
+    /// 05 -
+    /// 06 -
+    /// 07 -
+    /// 08 -
+    #[test]
+    #[ignore]
+    fn nmi_on_timing() {
+        run!("roms/ppu_vbl_nmi/nmi_on_timing.nes");
+    }
+
+    /// Tests NMI occurrence when disabled near time
+    /// VBL flag is set.
+    ///
+    /// Disables NMI one PPU clock later on each line.
+    /// Prints whether NMI occurred.
+    ///
+    /// 03 -
+    /// 04 -
+    /// 05 -
+    /// 06 -
+    /// 07 N
+    /// 08 N
+    /// 09 N
+    /// 0A N
+    /// 0B N
+    /// 0C N
+    #[test]
+    #[ignore]
+    fn nmi_off_timing() {
+        run!("roms/ppu_vbl_nmi/nmi_off_timing.nes");
     }
 
     /// Tests clock skipped on every other PPU frame when BG rendering
