@@ -19,7 +19,7 @@ use debug::DebugState;
 use mapper::Mapper;
 pub use memory::{Access, Memory, MutMemory, Ram};
 use ppu::Ppu;
-pub use rom::Rom;
+pub use rom::{Mirroring, Rom};
 use std::path::Path;
 
 #[derive(Clone)]
