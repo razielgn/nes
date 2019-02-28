@@ -441,6 +441,41 @@ fn oam_stress() {
     run!("roms/oam_stress.nes");
 }
 
+/// Tests behavior when reading from open-bus PPU bits/registers, those bits
+/// that aren't otherwise defined. Unlike other open-bus addresses, the PPU
+/// ones are separate. Takes about 5 seconds to run.
+///
+/// The PPU effectively has a "decay register", an 8-bit register. Each bit
+/// can be refreshed with a 0 or 1. If a bit isn't refreshed with a 1 for
+/// about 600 milliseconds, it will decay to 0 (some decay sooner, depending
+/// on the NES and temperature).
+///
+/// Writing to any PPU register sets the decay register to the value
+/// written. Reading from a PPU register is more complex. The following
+/// shows the effect of a read from each register:
+///
+/// 	Addr    Open-bus bits
+/// 			7654 3210
+/// 	- - - - - - - - - - - - - - - -
+/// 	$2000   DDDD DDDD
+/// 	$2001   DDDD DDDD
+/// 	$2002   ---D DDDD
+/// 	$2003   DDDD DDDD
+/// 	$2004   ---- ----
+/// 	$2005   DDDD DDDD
+/// 	$2006   DDDD DDDD
+/// 	$2007   ---- ----   non-palette
+/// 			DD-- ----   palette
+///
+/// A D means that this bit reads back as whatever is in the decay register
+/// at that bit, and doesn't refresh the decay register at that bit. A -
+/// means that this bit reads back as defined by the PPU, and refreshes the
+/// decay register at the corresponding bit.
+#[test]
+fn ppu_open_bus() {
+    run!("roms/ppu_open_bus.nes");
+}
+
 const RESET_DELAY: Cycles = 310_000;
 
 fn run_test_rom(buf: &[u8]) {

@@ -2,6 +2,7 @@ use self::MasterSlaveSelect::*;
 use self::SpriteSize::*;
 use self::VRamAddrIncr::*;
 use bits::BitOps;
+use std::mem;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Frame {
@@ -88,6 +89,7 @@ pub struct Ppu {
     oam_addr: u8,
 
     /// $2004 r/w
+    /// AKA sprite table
     oam_ram: [u8; 256],
 
     /// $2005 w x2
@@ -101,8 +103,12 @@ pub struct Ppu {
     /// +++----------------- fine Y scroll
     vram_addr: u16,
     temp_vram_addr: u16,
+    vram: [u8; 0x800],
+    temp_vram_read_buffer: u8,
 
-    open_bus: u8,
+    palette_ram: [u8; 0xFF],
+
+    open_bus: OpenBus,
 
     write_toggle: bool,
 }
@@ -118,10 +124,13 @@ impl Default for Ppu {
             frame: Frame::Even,
             oam_addr: 0,
             oam_ram: [0; 256],
+            vram: [0; 0x800],
+            palette_ram: [0; 0xFF],
             scroll: 0,
             vram_addr: 0,
             temp_vram_addr: 0,
-            open_bus: 0,
+            temp_vram_read_buffer: 0,
+            open_bus: OpenBus::default(),
             write_toggle: false,
         }
     }
@@ -129,18 +138,27 @@ impl Default for Ppu {
 
 impl Ppu {
     pub fn mut_read(&mut self, addr: u16) -> u8 {
-        match 0x2000 + (addr % 8) {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus,
+        let val = match 0x2000 + (addr % 8) {
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus.as_u8(),
             0x2002 => self.status(),
-            0x2004 => self.mut_read_from_oam(),
-            0x2007 => 0, // TODO: unimplemented (+ (low) open bus).
+            0x2004 => {
+                self.open_bus.refresh();
+                self.read_from_oam()
+            }
+            0x2007 => {
+                self.open_bus.refresh();
+                self.mut_read_from_data()
+            }
             _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
-        }
+        };
+
+        self.open_bus.set(val);
+        val
     }
 
     pub fn read(&self, addr: u16) -> u8 {
         match 0x2000 + (addr % 8) {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus,
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus.as_u8(),
             0x2002 => self.status_read_only(),
             0x2004 => self.read_from_oam(),
             0x2007 => 0,         // TODO: unimplemented.
@@ -149,9 +167,7 @@ impl Ppu {
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
-        if 0x2000 + (addr % 8) != 0x2002 {
-            self.open_bus = val;
-        }
+        self.open_bus.set(val);
 
         match 0x2000 + (addr % 8) {
             0x2000 => self.write_to_control(val),
@@ -161,9 +177,11 @@ impl Ppu {
             0x2004 => self.write_to_oam(val),
             0x2005 => self.write_to_scroll(val),
             0x2006 => self.write_to_addr(val),
-            0x2007 => (),        // TODO: unimplemented.
+            0x2007 => self.write_to_data(val),
             _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
         }
+
+        self.open_bus.refresh();
     }
 
     pub fn step(&mut self) -> bool {
@@ -173,6 +191,8 @@ impl Ppu {
             self.scanline,
             self.frame
         );
+
+        self.open_bus.step();
 
         let mut nim = false;
 
@@ -229,15 +249,12 @@ impl Ppu {
 
         self.write_toggle = false;
 
-        let prev_open_bus = self.open_bus;
-        self.open_bus &= 0b0001_1111;
-        self.open_bus |= status;
-
-        status | (prev_open_bus & 0b0001_1111)
+        let open_bus = self.open_bus.as_u8() & 0b0001_1111;
+        status | open_bus
     }
 
     fn status_read_only(&self) -> u8 {
-        self.status.as_u8() | (self.open_bus & 0b0001_1111)
+        self.status.as_u8() | (self.open_bus.as_u8() & 0b0001_1111)
     }
 
     fn write_to_control(&mut self, val: u8) {
@@ -284,12 +301,6 @@ impl Ppu {
         self.write_toggle = !self.write_toggle;
     }
 
-    fn mut_read_from_oam(&mut self) -> u8 {
-        let oam = self.read_from_oam();
-        self.open_bus = oam;
-        oam
-    }
-
     fn read_from_oam(&self) -> u8 {
         self.oam_ram[self.oam_addr as usize]
     }
@@ -310,6 +321,123 @@ impl Ppu {
                 self.oam_addr = self.oam_addr.wrapping_add(1);
             }
         }
+    }
+
+    fn mut_read_from_data(&mut self) -> u8 {
+        let addr = self.vram_addr;
+        let mut val = self.mem_read(addr);
+
+        if addr <= 0x3EFF {
+            mem::swap(&mut self.temp_vram_read_buffer, &mut val);
+        }
+
+        self.inc_vram_addr();
+        val
+    }
+
+    fn mem_read(&self, addr: u16) -> u8 {
+        match addr {
+            // Pattern Table 0
+            0x0000...0x0FFF => 0,
+
+            // Pattern Table 1
+            0x1000...0x1FFF => 0,
+
+            // Nametable 0
+            0x2000...0x23FF => self.vram[(addr - 0x2000) as usize],
+
+            // Nametable 1
+            0x2400...0x27FF => self.vram[(addr - 0x2400) as usize],
+
+            // Nametable 2
+            0x2800...0x2BFF => self.vram[(addr - 0x2400) as usize],
+
+            // Nametable 3
+            0x2C00...0x2FFF => self.vram[(addr - 0x2800) as usize],
+
+            // Mirror of 0x2000...0x2EFF
+            0x3000...0x3EFF => self.mem_read(0x2000 + (addr % 0xEF00)),
+
+            // Mirrored palette RAM indexes
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => self.mem_read(addr - 0x10),
+
+            // Palette RAM indexes
+            0x3F00...0x3F0F
+            | 0x3F11...0x3F13
+            | 0x3F15...0x3F17
+            | 0x3F19...0x3F1B
+            | 0x3F1D...0x3F1F => {
+                self.palette_ram[(addr - 0x3F00) as usize]
+                    | (self.open_bus.as_u8() & 0b1100_0000)
+            }
+
+            // Mirror of 0x3F00...0x3F1F
+            0x3F20...0x3FFF => self.mem_read(0x3F00 + (addr % 0x20)),
+
+            _ => 0,
+        }
+    }
+
+    fn write_to_data(&mut self, val: u8) {
+        let addr = self.vram_addr;
+        self.mem_write(addr, val);
+
+        self.inc_vram_addr();
+    }
+
+    fn mem_write(&mut self, addr: u16, val: u8) {
+        match addr {
+            // Pattern Table 0
+            0x0000...0x0FFF => (),
+
+            // Pattern Table 1
+            0x1000...0x1FFF => (),
+
+            // Nametable 0
+            0x2000...0x23FF => self.vram[(addr - 0x2000) as usize] = val,
+
+            // Nametable 1
+            0x2400...0x27FF => self.vram[(addr - 0x2400) as usize] = val,
+
+            // Nametable 2
+            0x2800...0x2BFF => self.vram[(addr - 0x2400) as usize] = val,
+
+            // Nametable 3
+            0x2C00...0x2FFF => self.vram[(addr - 0x2800) as usize] = val,
+
+            // Mirror of 0x2000...0x2EFF
+            0x3000...0x3EFF => {
+                self.mem_write(0x2000 + (addr % 0xEF00), val);
+            }
+
+            // Mirrored palette RAM indexes
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                self.mem_write(addr - 0x10, val);
+            }
+
+            // Palette RAM indexes
+            0x3F00...0x3F0F
+            | 0x3F11...0x3F13
+            | 0x3F15...0x3F17
+            | 0x3F19...0x3F1B
+            | 0x3F1D...0x3F1F => {
+                self.palette_ram[(addr - 0x3F00) as usize] = val;
+            }
+
+            // Mirror of 0x3F00...0x3F1F
+            0x3F20...0x3FFF => {
+                self.mem_write(0x3F00 + (addr % 0x20), val);
+            }
+            _ => (),
+        }
+    }
+
+    fn inc_vram_addr(&mut self) {
+        let incr = match self.control.vram_addr_incr() {
+            VRamAddrIncr::Add1GoingAcross => 1,
+            VRamAddrIncr::Add32GoingDown => 32,
+        };
+        self.vram_addr = self.vram_addr.wrapping_add(incr);
     }
 
     fn is_rendering_enabled(&self) -> bool {
@@ -461,6 +589,35 @@ pub enum SpriteSize {
 pub enum MasterSlaveSelect {
     ReadBackdropFromExt,
     OutputColorOnExt,
+}
+
+#[derive(Clone, Copy, Default)]
+struct OpenBus {
+    val: u8,
+    decay_cycles: usize,
+}
+
+// FIXME: this is probably not correct.
+impl OpenBus {
+    pub fn as_u8(&self) -> u8 {
+        self.val
+    }
+
+    pub fn set(&mut self, val: u8) {
+        self.val = val;
+    }
+
+    pub fn refresh(&mut self) {
+        self.decay_cycles = 4_288_392; // TODO: empyrical constant, prove it.
+    }
+
+    pub fn step(&mut self) {
+        self.decay_cycles = self.decay_cycles.saturating_sub(1);
+
+        if self.decay_cycles == 0 {
+            self.set(0);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -703,5 +860,77 @@ mod tests {
         assert_eq!(0b010_1010_0100_1010, ppu.temp_vram_addr);
         assert_eq!(ppu.vram_addr, ppu.temp_vram_addr);
         assert_eq!(false, ppu.write_toggle);
+    }
+
+    #[test]
+    fn write_to_data_increments_vram_addr() {
+        let mut ppu = Ppu::default();
+
+        assert_eq!(0, ppu.vram_addr);
+        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+
+        ppu.write(0x2007, 0xFF);
+        assert_eq!(1, ppu.vram_addr);
+
+        ppu.write(0x2000, 0b0000_0100);
+        assert_eq!(VRamAddrIncr::Add32GoingDown, ppu.control.vram_addr_incr());
+
+        ppu.write(0x2007, 0xFF);
+        assert_eq!(33, ppu.vram_addr);
+    }
+
+    #[test]
+    fn read_from_data_increments_vram_addr() {
+        let mut ppu = Ppu::default();
+
+        assert_eq!(0, ppu.vram_addr);
+        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+
+        ppu.mut_read(0x2007);
+        assert_eq!(1, ppu.vram_addr);
+
+        ppu.write(0x2000, 0b0000_0100);
+        assert_eq!(VRamAddrIncr::Add32GoingDown, ppu.control.vram_addr_incr());
+
+        ppu.mut_read(0x2007);
+        assert_eq!(33, ppu.vram_addr);
+    }
+
+    #[test]
+    fn read_from_data_not_in_palettes_address_range_is_delayed_by_one_read() {
+        // TODO: also test pattern tables address space.
+        let mut ppu = Ppu::default();
+
+        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+        ppu.vram_addr = 0x2000;
+        ppu.write(0x2007, 0xFF);
+        ppu.write(0x2007, 0xA0);
+
+        ppu.vram_addr = 0x2000;
+        assert_eq!(0x00, ppu.mut_read(0x2007));
+        assert_eq!(0xFF, ppu.mut_read(0x2007));
+        assert_eq!(0xA0, ppu.mut_read(0x2007));
+    }
+
+    #[test]
+    fn read_immediately_from_data_in_palettes_address_range() {
+        let mut ppu = Ppu::default();
+
+        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+        ppu.vram_addr = 0x3F00;
+        ppu.write(0x2007, 0xFF);
+        ppu.write(0x2007, 0xA0);
+
+        let open_bus_filter_mask = 0b0011_1111;
+
+        ppu.vram_addr = 0x3F00;
+        assert_eq!(
+            0xFF & open_bus_filter_mask,
+            ppu.mut_read(0x2007) & open_bus_filter_mask
+        );
+        assert_eq!(
+            0xA0 & open_bus_filter_mask,
+            ppu.mut_read(0x2007) & open_bus_filter_mask
+        );
     }
 }
