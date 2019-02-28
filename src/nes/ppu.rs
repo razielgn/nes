@@ -219,7 +219,7 @@ impl Ppu {
 
         match (self.frame, self.scanline, self.cycle) {
             // On odd frames, with background enabled, skip one cycle.
-            (Frame::Odd, 0, 1) if self.mask.show_background() => {
+            (Frame::Odd, 261, 339) if self.mask.show_background() => {
                 self.cycle += 1;
             }
             (_, 261, 341) => {
@@ -249,8 +249,7 @@ impl Ppu {
 
         self.write_toggle = false;
 
-        let open_bus = self.open_bus.as_u8() & 0b0001_1111;
-        status | open_bus
+        status | (self.open_bus.as_u8() & 0b0001_1111)
     }
 
     fn status_read_only(&self) -> u8 {

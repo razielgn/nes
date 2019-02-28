@@ -4,7 +4,7 @@ use nes::{Access, Cycles, Nes};
 
 macro_rules! run {
     ($path:expr) => {
-        run_test_rom(include_bytes!($path));
+        ::run_test_rom(include_bytes!($path));
     };
 }
 
@@ -30,8 +30,6 @@ macro_rules! run {
 /// $G1 is written to $6001-$6003.
 
 mod instr_test_v5 {
-    use super::*;
-
     #[test]
     fn basics() {
         run!("roms/instr_test_v5/01-basics.nes");
@@ -125,8 +123,6 @@ mod instr_test_v5 {
 }
 
 mod cpu_interrupts_v2 {
-    use super::*;
-
     /// CLI Latency Summary
     /// -------------------
     /// The RTI instruction affects IRQ inhibition immediately. If an IRQ is
@@ -316,8 +312,6 @@ mod cpu_interrupts_v2 {
 }
 
 mod instr_misc {
-    use super::*;
-
     /// NES CPU Instruction Behavior Misc Tests
     /// ----------------------------------------
     /// These tests verify miscellaneous instruction behavior.
@@ -360,8 +354,6 @@ mod instr_misc {
 }
 
 mod instr_timing {
-    use super::*;
-
     /// NES CPU Instruction Timing Test
     /// -------------------------------
     /// These tests verify timing of all NES CPU instructions, except the 12
@@ -388,8 +380,6 @@ mod instr_timing {
 }
 
 mod cpu_reset {
-    use super::*;
-
     /// At power, A,X,Y=0 P=$34 S=$FD
     /// At reset, I flag set, S decreased by 3, no other change
     #[test]
@@ -474,6 +464,69 @@ fn oam_stress() {
 #[test]
 fn ppu_open_bus() {
     run!("roms/ppu_open_bus.nes");
+}
+
+mod ppu_vbl_nmi {
+    /// Tests basic VBL operation and VBL period.
+    ///
+    /// 2) VBL period is way off
+    /// 3) Reading VBL flag should clear it
+    /// 4) Writing $2002 shouldn't affect VBL flag
+    /// 5) $2002 should be mirrored at $200A
+    /// 6) $2002 should be mirrored every 8 bytes up to $2FFA
+    /// 7) VBL period is too short with BG off
+    /// 8) VBL period is too long with BG off
+    #[test]
+    fn vbl_basics() {
+        run!("roms/ppu_vbl_nmi/vbl_basics.nes");
+    }
+
+    /// Tests time VBL flag is cleared.
+    ///
+    /// Reads $2002 and prints VBL flag.
+    /// Test is run one PPU clock later each line,
+    /// around the time the flag is cleared.
+    ///
+    /// 00 V
+    /// 01 V
+    /// 02 V
+    /// 03 V
+    /// 04 V
+    /// 05 V
+    /// 06 -
+    /// 07 -
+    /// 08 -
+    #[test]
+    fn vbl_clear_time() {
+        run!("roms/ppu_vbl_nmi/vbl_clear_time.nes");
+    }
+
+    /// Tests clock skipped on every other PPU frame when BG rendering
+    /// is enabled.
+    ///
+    /// Tries pattern of BG enabled/disabled during a sequence of
+    /// 5 frames, then finds how many clocks were skipped. Prints
+    /// number skipped clocks to help find problems.
+    ///
+    /// Correct output: 00 01 01 02
+    #[test]
+    fn even_odd_frames() {
+        run!("roms/ppu_vbl_nmi/even_odd_frames.nes");
+    }
+
+    /// Tests timing of skipped clock every other frame
+    /// when BG is enabled.
+    ///
+    /// Output: 08 08 09 07
+    ///
+    /// 2) Clock is skipped too soon, relative to enabling BG
+    /// 3) Clock is skipped too late, relative to enabling BG
+    /// 4) Clock is skipped too soon, relative to disabling BG
+    /// 5) Clock is skipped too late, relative to disabling BG
+    #[test]
+    fn even_odd_timing() {
+        run!("roms/ppu_vbl_nmi/even_odd_timing.nes");
+    }
 }
 
 const RESET_DELAY: Cycles = 310_000;
