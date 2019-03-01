@@ -91,7 +91,6 @@ impl<'a> MutAccess for MutMemory<'a> {
             0x2000...0x3FFF => self.ppu.mut_read(addr),
             0x4000...0x401F => 0xFF, // TODO read from I/O registers
             0x4020...0xFFFF => self.mapper.read(addr),
-            _ => unreachable!(),
         };
 
         debug!("read {:04x} => {:02x}", addr, read);
@@ -107,7 +106,6 @@ impl<'a> MutAccess for MutMemory<'a> {
             0x4014 => self.dma_transfer(val),
             0x4015...0x401F => (), // TODO write to I/O registers
             0x4020...0xFFFF => self.mapper.write(addr, val),
-            _ => unreachable!(),
         }
     }
 }
@@ -125,7 +123,6 @@ impl<'a> Access for Memory<'a> {
             0x2000...0x3FFF => self.ppu.read(addr),
             0x4000...0x401F => 0xFF, // TODO read from I/O registers
             0x4020...0xFFFF => self.mapper.read(addr),
-            _ => unreachable!(),
         };
 
         debug!("read {:04x} => {:02x}", addr, read);
