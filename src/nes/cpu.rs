@@ -9,24 +9,6 @@ const RESET_VECTOR: u16 = 0xFFFC;
 pub type Cycles = usize;
 
 #[derive(Clone, Copy, Debug)]
-enum Interrupt {
-    Nmi,
-    #[allow(dead_code)]
-    Irq,
-}
-
-impl Interrupt {
-    pub fn addr(self) -> u16 {
-        use self::Interrupt::*;
-
-        match self {
-            Nmi => 0xFFFA,
-            Irq => 0xFFFE,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
 pub struct Cpu {
     pub cycles: Cycles,
     pub pc: u16,
@@ -41,12 +23,12 @@ pub struct Cpu {
     pub op: u8,
     pub op_arg: u16,
 
-    interrupt: Option<Interrupt>,
+    pub nmi: bool,
 }
 
 impl Cpu {
     pub fn new(pc: u16) -> Self {
-        let cpu = Self {
+        Self {
             cycles: 0,
             pc,
             sp: 0xFD,
@@ -58,29 +40,26 @@ impl Cpu {
             op: 0,
             label: KIL,
             op_arg: 0,
-            interrupt: None,
-        };
-
-        debug!("{:X?}", cpu);
-
-        cpu
+            nmi: false,
+        }
     }
 
     pub fn jump(&mut self, addr: u16) {
         self.pc = addr;
     }
 
-    fn interrupt<M: MutAccess>(&mut self, mem: &mut M, interrupt: Interrupt) {
+    fn perform_interrupt<M: MutAccess>(&mut self, mem: &mut M, addr: u16) {
         let pc = self.pc;
         self.push_double(pc, mem);
         self.php(mem);
-        self.pc = self.read_word(interrupt.addr(), mem);
+        self.pc = self.read_word(addr, mem);
         self.p.set(InterruptDisable);
         self.cycles += 7;
     }
 
     pub fn reset<M: MutAccess>(&mut self, mem: &mut M) {
-        self.interrupt = None;
+        self.nmi = false;
+
         self.pc = self.read_word(RESET_VECTOR, mem);
         self.p.set(InterruptDisable);
         self.sp = self.sp.wrapping_sub(3);
@@ -90,12 +69,6 @@ impl Cpu {
 
     pub fn step<M: MutAccess>(&mut self, mem: &mut M) -> Cycles {
         trace!("step");
-
-        if let Some(int) = self.interrupt {
-            debug!("handling interrupt {:?}", int);
-            self.interrupt(mem, int);
-            self.interrupt = None;
-        }
 
         let old_cycles = self.cycles;
         self.fetch_op(mem);
@@ -426,11 +399,13 @@ impl Cpu {
 
         debug!("{:X?}", self);
 
-        self.cycles - old_cycles
-    }
+        if self.nmi {
+            debug!("handling NMI");
+            self.perform_interrupt(mem, 0xFFFA);
+            self.nmi = false;
+        }
 
-    pub fn trigger_nmi(&mut self) {
-        self.interrupt = Some(Interrupt::Nmi);
+        self.cycles - old_cycles
     }
 
     fn nop<M: MutAccess>(&mut self, mem: &mut M) {

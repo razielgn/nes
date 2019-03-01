@@ -1,6 +1,4 @@
-use self::MasterSlaveSelect::*;
-use self::SpriteSize::*;
-use self::VRamAddrIncr::*;
+use self::{MasterSlaveSelect::*, SpriteSize::*, VRamAddrIncr::*};
 use bits::BitOps;
 use std::mem;
 
@@ -17,6 +15,12 @@ impl Frame {
             Frame::Odd => Frame::Even,
         }
     }
+}
+
+pub enum StepResult {
+    Nothing,
+    NmiPulled,
+    NmiCleared,
 }
 
 #[derive(Clone, Copy)]
@@ -184,7 +188,7 @@ impl Ppu {
         self.open_bus.refresh();
     }
 
-    pub fn step(&mut self) -> bool {
+    pub fn step(&mut self) -> StepResult {
         trace!(
             "step cycle {:3}, scanline {:3}, frame {:4?}",
             self.cycle,
@@ -194,7 +198,7 @@ impl Ppu {
 
         self.open_bus.step();
 
-        let mut nim = false;
+        let mut res = StepResult::Nothing;
 
         match (self.scanline, self.cycle) {
             // Vertical blanking lines
@@ -203,7 +207,7 @@ impl Ppu {
                 self.status.set_vblank();
 
                 if self.control.nmi_at_next_vblank() {
-                    nim = true;
+                    res = StepResult::NmiPulled;
                 }
             }
 
@@ -236,7 +240,7 @@ impl Ppu {
             _ => {}
         }
 
-        nim
+        res
     }
 
     fn status(&mut self) -> u8 {

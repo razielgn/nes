@@ -18,7 +18,7 @@ pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
 use mapper::Mapper;
 pub use memory::{Access, Memory, MutMemory, Ram};
-use ppu::Ppu;
+use ppu::{Ppu, StepResult};
 pub use rom::{Mirroring, Rom};
 use std::path::Path;
 
@@ -79,10 +79,14 @@ impl Nes {
         };
 
         for _ in 0..cycles * 3 {
-            let nmi_triggered = self.ppu.step();
-
-            if nmi_triggered {
-                self.cpu.trigger_nmi();
+            match self.ppu.step() {
+                StepResult::Nothing => {}
+                StepResult::NmiPulled => {
+                    self.cpu.nmi = true;
+                }
+                StepResult::NmiCleared => {
+                    self.cpu.nmi = false;
+                }
             }
         }
 
