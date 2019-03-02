@@ -122,7 +122,7 @@ impl Ppu {
             control: Control::default(),
             mask: Mask::default(),
             cycle: 0,
-            scanline: 0,
+            scanline: PRE_RENDER_SCANLINE,
             frame: Frame::Even,
             oam_addr: 0,
             oam_ram: [0; 256],
@@ -788,10 +788,14 @@ mod tests {
         ppu.write(0x2001, 0b0000_1000);
         assert!(ppu.mask.show_background());
 
-        for (cycles, frame) in [CYCLES_FULL_FRAME, CYCLES_FULL_FRAME - 1]
+        for _ in 0..CYCLES_ONE_SCANLINE {
+            ppu.step();
+        }
+
+        for (cycles, frame) in [CYCLES_FULL_FRAME - 1, CYCLES_FULL_FRAME]
             .iter()
             .cycle()
-            .zip([Frame::Even, Frame::Odd].iter().cycle())
+            .zip([Frame::Odd, Frame::Even].iter().cycle())
             .take(10)
         {
             assert_eq!(0, ppu.scanline);
@@ -809,8 +813,12 @@ mod tests {
         let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.mask.show_background());
 
+        for _ in 0..CYCLES_ONE_SCANLINE {
+            ppu.step();
+        }
+
         for (cycles, frame) in iter::repeat(CYCLES_FULL_FRAME)
-            .zip([Frame::Even, Frame::Odd].iter().cycle())
+            .zip([Frame::Odd, Frame::Even].iter().cycle())
             .take(10)
         {
             assert_eq!(0, ppu.scanline);
