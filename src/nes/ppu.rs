@@ -17,6 +17,8 @@ impl Frame {
     }
 }
 
+const VBLANK_START_SCANLINE: u16 = 241;
+const PRE_RENDER_SCANLINE: u16 = 261;
 
 #[derive(Clone)]
 pub struct Ppu {
@@ -199,8 +201,7 @@ impl Ppu {
         self.open_bus.step();
 
         match (self.scanline, self.cycle) {
-            // Vertical blanking lines
-            (241, 1) => {
+            (VBLANK_START_SCANLINE, 1) => {
                 debug!("vblank starts");
                 self.status.set_vblank();
 
@@ -209,33 +210,34 @@ impl Ppu {
                 }
             }
 
-            // Pre-render scanline
-            (261, 1) => {
+            (PRE_RENDER_SCANLINE, 1) => {
                 debug!("vblank ends");
                 self.status.clear_vblank();
             }
             _ => (),
         }
 
-        self.cycle += 1;
-
         match (self.frame, self.scanline, self.cycle) {
             // On odd frames, with background enabled, skip one cycle.
-            (Frame::Odd, 261, 339) if self.mask.show_background() => {
-                self.cycle += 1;
+            (Frame::Odd, PRE_RENDER_SCANLINE, 338)
+                if self.mask.show_background() =>
+            {
+                self.cycle += 2;
             }
-            (_, 261, 341) => {
+            (_, PRE_RENDER_SCANLINE, 340) => {
                 debug!("end of {:?} frame", self.frame);
                 self.cycle = 0;
                 self.scanline = 0;
                 self.frame = self.frame.next();
             }
-            (_, _, 341) => {
+            (_, _, 340) => {
                 debug!("end of scanline {}", self.scanline);
                 self.cycle = 0;
                 self.scanline += 1;
             }
-            _ => {}
+            _ => {
+                self.cycle += 1;
+            }
         }
     }
 
@@ -306,7 +308,7 @@ impl Ppu {
 
     fn write_to_oam(&mut self, mut val: u8) {
         match self.scanline {
-            0...239 | 261 if self.is_rendering_enabled() => {
+            0...239 | PRE_RENDER_SCANLINE if self.is_rendering_enabled() => {
                 // TODO(low): glitchy OAM increment by bumping only the high 6 bits of OAMADDR.
             }
             _ => {
@@ -625,6 +627,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::iter;
 
+    const CYCLES_ONE_SCANLINE: usize = 341;
+    const CYCLES_TO_VBLANK_SCANLINE: usize = 341 * 242;
+    const CYCLES_FULL_FRAME: usize = 341 * 262;
+
     mod control {
         use super::super::*;
 
@@ -750,7 +756,7 @@ mod tests {
         let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..(341 * 241) + 2 {
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 2) {
             ppu.step();
         }
 
@@ -763,7 +769,7 @@ mod tests {
         let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..(341 * 241) + 2 {
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 2) {
             ppu.step();
         }
 
@@ -782,7 +788,7 @@ mod tests {
         ppu.write(0x2001, 0b0000_1000);
         assert!(ppu.mask.show_background());
 
-        for (cycles, frame) in [89342, 89341]
+        for (cycles, frame) in [CYCLES_FULL_FRAME, CYCLES_FULL_FRAME - 1]
             .iter()
             .cycle()
             .zip([Frame::Even, Frame::Odd].iter().cycle())
@@ -803,7 +809,7 @@ mod tests {
         let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.mask.show_background());
 
-        for (cycles, frame) in iter::repeat(89342)
+        for (cycles, frame) in iter::repeat(CYCLES_FULL_FRAME)
             .zip([Frame::Even, Frame::Odd].iter().cycle())
             .take(10)
         {
