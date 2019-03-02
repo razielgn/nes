@@ -1,5 +1,5 @@
 use self::{MasterSlaveSelect::*, SpriteSize::*, VRamAddrIncr::*};
-use bits::BitOps;
+use crate::{bits::BitOps, pin::Pin};
 use std::mem;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,13 +17,8 @@ impl Frame {
     }
 }
 
-pub enum StepResult {
-    Nothing,
-    NmiPulled,
-    NmiCleared,
-}
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Ppu {
     scanline: u16,
     cycle: u16,
@@ -115,10 +110,11 @@ pub struct Ppu {
     open_bus: OpenBus,
 
     write_toggle: bool,
+    nmi_pin: Pin,
 }
 
-impl Default for Ppu {
-    fn default() -> Self {
+impl Ppu {
+    pub fn new(nmi_pin: Pin) -> Self {
         Self {
             status: Status::default(),
             control: Control::default(),
@@ -136,11 +132,15 @@ impl Default for Ppu {
             temp_vram_read_buffer: 0,
             open_bus: OpenBus::default(),
             write_toggle: false,
+            nmi_pin,
         }
     }
-}
 
-impl Ppu {
+    #[cfg(test)]
+    pub fn with_detached_pin() -> Self {
+        Self::new(Pin::default())
+    }
+
     pub fn mut_read(&mut self, addr: u16) -> u8 {
         let val = match 0x2000 + (addr % 8) {
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus.as_u8(),
@@ -188,7 +188,7 @@ impl Ppu {
         self.open_bus.refresh();
     }
 
-    pub fn step(&mut self) -> StepResult {
+    pub fn step(&mut self) {
         trace!(
             "step cycle {:3}, scanline {:3}, frame {:4?}",
             self.cycle,
@@ -198,8 +198,6 @@ impl Ppu {
 
         self.open_bus.step();
 
-        let mut res = StepResult::Nothing;
-
         match (self.scanline, self.cycle) {
             // Vertical blanking lines
             (241, 1) => {
@@ -207,7 +205,7 @@ impl Ppu {
                 self.status.set_vblank();
 
                 if self.control.nmi_at_next_vblank() {
-                    res = StepResult::NmiPulled;
+                    self.nmi_pin.pull();
                 }
             }
 
@@ -239,8 +237,6 @@ impl Ppu {
             }
             _ => {}
         }
-
-        res
     }
 
     fn status(&mut self) -> u8 {
@@ -717,7 +713,7 @@ mod tests {
 
     #[test]
     fn open_bus() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
 
         for offset in &[0u16, 1, 3, 4, 5, 6, 7] {
             let val = (*offset as u8) + 0xF0;
@@ -737,8 +733,21 @@ mod tests {
     }
 
     #[test]
+    fn vblank_start_with_nmi_at_next_vblank_pulls_nmi() {
+        let mut ppu = Ppu::with_detached_pin();
+        assert!(!ppu.read(0x2002).is_bit_set(7));
+        ppu.write(0x2000, 0b1000_0000);
+
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 2) {
+            ppu.step();
+        }
+
+        assert!(ppu.nmi_pin.is_pulled());
+    }
+
+    #[test]
     fn vblank_has_started_and_reading_status_resets_it() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
         for _ in 0..(341 * 241) + 2 {
@@ -751,7 +760,7 @@ mod tests {
 
     #[test]
     fn vblank_has_ended() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
         for _ in 0..(341 * 241) + 2 {
@@ -769,7 +778,7 @@ mod tests {
 
     #[test]
     fn odd_frames_are_shorter_by_one_cycle() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
         ppu.write(0x2001, 0b0000_1000);
         assert!(ppu.mask.show_background());
 
@@ -791,7 +800,7 @@ mod tests {
 
     #[test]
     fn all_frames_are_equal_when_bg_is_disabled() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.mask.show_background());
 
         for (cycles, frame) in iter::repeat(89342)
@@ -810,7 +819,7 @@ mod tests {
 
     #[test]
     fn oam_write_and_read() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
         ppu.write(0x2004, 0xFF);
         ppu.write(0x2004, 0xFE);
         ppu.write(0x2004, 0xFD);
@@ -832,7 +841,7 @@ mod tests {
     /// https://wiki.nesdev.com/w/index.php?title=PPU_scrolling#Register_controls
     #[test]
     fn scroll_and_addr_write_example() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
 
         // $2000 write
         ppu.write(0x2000, 0b0000_0011);
@@ -867,7 +876,7 @@ mod tests {
 
     #[test]
     fn write_to_data_increments_vram_addr() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
 
         assert_eq!(0, ppu.vram_addr);
         assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
@@ -884,7 +893,7 @@ mod tests {
 
     #[test]
     fn read_from_data_increments_vram_addr() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
 
         assert_eq!(0, ppu.vram_addr);
         assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
@@ -902,7 +911,7 @@ mod tests {
     #[test]
     fn read_from_data_not_in_palettes_address_range_is_delayed_by_one_read() {
         // TODO: also test pattern tables address space.
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
 
         assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
         ppu.vram_addr = 0x2000;
@@ -917,7 +926,7 @@ mod tests {
 
     #[test]
     fn read_immediately_from_data_in_palettes_address_range() {
-        let mut ppu = Ppu::default();
+        let mut ppu = Ppu::with_detached_pin();
 
         assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
         ppu.vram_addr = 0x3F00;

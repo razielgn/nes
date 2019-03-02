@@ -12,8 +12,8 @@ pub struct DebugState {
 
 impl Display for DebugState {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        let prev_cpu = self.prev.cpu;
-        let curr_cpu = self.curr.cpu;
+        let prev_cpu = &self.prev.cpu;
+        let curr_cpu = &self.curr.cpu;
         let mem = self.prev.memory();
 
         let pc = prev_cpu.pc;

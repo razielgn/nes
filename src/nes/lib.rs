@@ -11,6 +11,7 @@ mod debug;
 mod instruction;
 mod mapper;
 mod memory;
+mod pin;
 mod ppu;
 mod rom;
 
@@ -18,7 +19,8 @@ pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
 use mapper::Mapper;
 pub use memory::{Access, Memory, MutMemory, Ram};
-use ppu::{Ppu, StepResult};
+use pin::Pin;
+use ppu::Ppu;
 pub use rom::{Mirroring, Rom};
 use std::path::Path;
 
@@ -53,11 +55,12 @@ impl Nes {
     pub fn from_rom(rom: Rom) -> Self {
         let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
+        let nmi_pin = Pin::default();
 
         Self {
-            cpu: Cpu::new(pc),
+            cpu: Cpu::with_pc_and_nmi_pin(pc, nmi_pin.clone()),
             mapper,
-            ppu: Ppu::default(),
+            ppu: Ppu::new(nmi_pin),
             ram: Ram::default(),
         }
     }
@@ -79,15 +82,7 @@ impl Nes {
         };
 
         for _ in 0..cycles * 3 {
-            match self.ppu.step() {
-                StepResult::Nothing => {}
-                StepResult::NmiPulled => {
-                    self.cpu.nmi = true;
-                }
-                StepResult::NmiCleared => {
-                    self.cpu.nmi = false;
-                }
-            }
+            self.ppu.step();
         }
 
         cycles

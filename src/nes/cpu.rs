@@ -1,14 +1,17 @@
 use self::Status::*;
-use bits::{BitOps, HighLowBits};
-use instruction::{AddressingMode, Label, Label::*};
-use memory::MutAccess;
+use crate::{
+    bits::{BitOps, HighLowBits},
+    instruction::{AddressingMode, Label, Label::*},
+    memory::MutAccess,
+    pin::Pin,
+};
 
 const BRK_VECTOR: u16 = 0xFFFE;
 const RESET_VECTOR: u16 = 0xFFFC;
 
 pub type Cycles = usize;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Cpu {
     pub cycles: Cycles,
     pub pc: u16,
@@ -23,11 +26,16 @@ pub struct Cpu {
     pub op: u8,
     pub op_arg: u16,
 
-    pub nmi: bool,
+    nmi_pin: Pin,
 }
 
 impl Cpu {
-    pub fn new(pc: u16) -> Self {
+    #[cfg(test)]
+    pub fn with_pc(pc: u16) -> Self {
+        Self::with_pc_and_nmi_pin(pc, Pin::default())
+    }
+
+    pub fn with_pc_and_nmi_pin(pc: u16, nmi_pin: Pin) -> Self {
         Self {
             cycles: 0,
             pc,
@@ -40,7 +48,7 @@ impl Cpu {
             op: 0,
             label: KIL,
             op_arg: 0,
-            nmi: false,
+            nmi_pin,
         }
     }
 
@@ -58,7 +66,7 @@ impl Cpu {
     }
 
     pub fn reset<M: MutAccess>(&mut self, mem: &mut M) {
-        self.nmi = false;
+        self.nmi_pin.clear();
 
         self.pc = self.read_word(RESET_VECTOR, mem);
         self.p.set(InterruptDisable);
@@ -399,10 +407,10 @@ impl Cpu {
 
         debug!("{:X?}", self);
 
-        if self.nmi {
+        if self.nmi_pin.is_pulled() {
             debug!("handling NMI");
             self.perform_interrupt(mem, 0xFFFA);
-            self.nmi = false;
+            self.nmi_pin.clear();
         }
 
         self.cycles - old_cycles
@@ -909,7 +917,7 @@ mod test {
 
     #[test]
     fn nop_implied() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xEA, 0x00];
         cpu.step(&mut m);
 
@@ -922,7 +930,7 @@ mod test {
 
     #[test]
     fn asl_accumulator() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         cpu.a = 0x02;
         let mut m = vec![0x0A, 0x00];
         cpu.step(&mut m);
@@ -937,7 +945,7 @@ mod test {
 
     #[test]
     fn lda_immediate() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xA9, 0xEF];
         cpu.step(&mut m);
 
@@ -952,7 +960,7 @@ mod test {
 
     #[test]
     fn lda_zero_page() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xA5, 0x02, 0xFF];
         cpu.step(&mut m);
 
@@ -966,7 +974,7 @@ mod test {
 
     #[test]
     fn lda_zero_page_x() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xB5, 0x02, 0x00, 0xFF];
         cpu.x = 1;
         cpu.step(&mut m);
@@ -981,7 +989,7 @@ mod test {
 
     #[test]
     fn ldx_zero_page_y() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xB6, 0x02, 0x00, 0xFF];
         cpu.y = 1;
         cpu.step(&mut m);
@@ -996,7 +1004,7 @@ mod test {
 
     #[test]
     fn jmp_indirect() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x6C, 0x04, 0x00, 0x00, 0xFF, 0x00];
         cpu.step(&mut m);
 
@@ -1009,7 +1017,7 @@ mod test {
 
     #[test]
     fn lda_absolute() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xAD, 0x04, 0x00, 0x00, 0xFF];
         cpu.step(&mut m);
 
@@ -1023,7 +1031,7 @@ mod test {
 
     #[test]
     fn lda_absolute_x() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xBD, 0x04, 0x00, 0x00, 0x00, 0xFF];
         cpu.x = 1;
         cpu.step(&mut m);
@@ -1038,7 +1046,7 @@ mod test {
 
     #[test]
     fn lda_absolute_x_page_cross() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xBD, 0x02, 0x01];
         m.resize(0x202, 0);
         m[0x201] = 0xFF;
@@ -1055,7 +1063,7 @@ mod test {
 
     #[test]
     fn rol_absolute_x_dummy_read() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x3E, 0x04, 0x00, 0x00, 0x00, 0b01010101];
         cpu.x = 1;
         cpu.step(&mut m);
@@ -1070,7 +1078,7 @@ mod test {
 
     #[test]
     fn lda_absolute_y() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xB9, 0x04, 0x00, 0x00, 0x00, 0xFF];
         cpu.y = 1;
         cpu.step(&mut m);
@@ -1085,7 +1093,7 @@ mod test {
 
     #[test]
     fn lda_absolute_y_page_cross() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xB9, 0x02, 0x01];
         m.resize(0x202, 0);
         m[0x201] = 0xFF;
@@ -1102,7 +1110,7 @@ mod test {
 
     #[test]
     fn sta_absolute_y_dummy_read() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x99, 0x04, 0x00, 0x00, 0x00, 0x00];
         cpu.y = 1;
         cpu.a = 0xFF;
@@ -1118,7 +1126,7 @@ mod test {
 
     #[test]
     fn bpl_relative_branch() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x10, 0x02, 0x00, 0x00];
         cpu.step(&mut m);
 
@@ -1131,7 +1139,7 @@ mod test {
 
     #[test]
     fn bpl_relative_not_branch() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x10, 0x02, 0x00, 0x00];
         cpu.p.set(NegativeFlag);
         cpu.step(&mut m);
@@ -1145,7 +1153,7 @@ mod test {
 
     #[test]
     fn lda_indexed_indirect() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xA1, 0x02, 0x00, 0x05, 0x00, 0xFF];
         cpu.x = 1;
         cpu.step(&mut m);
@@ -1160,7 +1168,7 @@ mod test {
 
     #[test]
     fn lda_indexed_indirect_page_wraparound() {
-        let mut cpu = Cpu::new(1);
+        let mut cpu = Cpu::with_pc(1);
         let mut m = vec![0xDE, 0xA1, 0x01];
         m.resize(0xFFFF, 0);
         m[0xFF] = 0xAD;
@@ -1178,7 +1186,7 @@ mod test {
 
     #[test]
     fn lda_indirect_indexed() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xB1, 0x02, 0x03, 0x00, 0xFF];
         cpu.y = 1;
         cpu.step(&mut m);
@@ -1193,7 +1201,7 @@ mod test {
 
     #[test]
     fn lda_indirect_indexed_page_wraparound() {
-        let mut cpu = Cpu::new(1);
+        let mut cpu = Cpu::with_pc(1);
         let mut m = vec![0x00, 0xB1, 0xFF];
         m.resize(0x100, 0);
         m[0xFF] = 0x04;
@@ -1211,7 +1219,7 @@ mod test {
 
     #[test]
     fn lda_indirect_indexed_page_crossing() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0xB1, 0x02, 0x02, 0x01];
         m.resize(0x202, 0);
         m[0x201] = 0xFF;
@@ -1228,7 +1236,7 @@ mod test {
 
     #[test]
     fn sta_indirect_indexed_dummy_read() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x91, 0x02, 0x00, 0x01];
         m.resize(0x102, 0);
         cpu.y = 1;
@@ -1245,7 +1253,7 @@ mod test {
 
     #[test]
     fn reset() {
-        let mut cpu = Cpu::new(0);
+        let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0u8; 0xFFFF];
         m[0xFFFC] = 0xAD;
         m[0xFFFD] = 0xDE;
