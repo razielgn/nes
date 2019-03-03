@@ -6,8 +6,9 @@ use crate::{
     pin::Pin,
 };
 
-const BRK_VECTOR: u16 = 0xFFFE;
+const NMI_VECTOR: u16 = 0xFFFA;
 const RESET_VECTOR: u16 = 0xFFFC;
+const BRK_VECTOR: u16 = 0xFFFE;
 
 pub type Cycles = usize;
 
@@ -409,7 +410,7 @@ impl Cpu {
 
         if self.nmi_pin.is_pulled() {
             debug!("handling NMI");
-            self.perform_interrupt(mem, 0xFFFA);
+            self.perform_interrupt(mem, NMI_VECTOR);
             self.nmi_pin.clear();
         }
 
