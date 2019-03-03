@@ -263,7 +263,18 @@ impl Ppu {
         self.temp_vram_addr &= !0b000_1100_0000_0000;
         self.temp_vram_addr |= (u16::from(val) & 0b11) << 10;
 
+        self.nmi_quirk_on_control_write(val);
+
         self.control.set(val);
+    }
+
+    fn nmi_quirk_on_control_write(&mut self, val: u8) {
+        if val.is_bit_set(7)
+            && !self.control.nmi_at_next_vblank()
+            && self.status.is_vblank_set()
+        {
+            self.nmi_pin.pull_with_delay(1);
+        }
     }
 
     fn write_to_scroll(&mut self, val: u8) {
@@ -780,6 +791,20 @@ mod tests {
         }
 
         assert!(!ppu.read(0x2002).is_bit_set(7));
+    }
+
+    #[test]
+    fn writing_to_control_on_vblank_pulls_pin_with_one_instr_delay() {
+        let mut ppu = Ppu::with_detached_pin();
+
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 2) {
+            ppu.step();
+        }
+
+        ppu.write(0x2000, 0b1000_0000);
+
+        ppu.nmi_pin.decr_delay();
+        assert!(ppu.nmi_pin.is_pulled());
     }
 
     #[test]

@@ -535,7 +535,6 @@ mod ppu_vbl_nmi {
     /// 10) Should occur again if enabling after disabled 2
     /// 11) Immediate occurence should be after NEXT instruction
     #[test]
-    #[ignore]
     fn nmi_control() {
         run!("roms/ppu_vbl_nmi/nmi_control.nes");
     }

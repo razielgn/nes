@@ -413,6 +413,8 @@ impl Cpu {
             self.nmi_pin.clear();
         }
 
+        self.nmi_pin.decr_delay();
+
         self.cycles - old_cycles
     }
 
