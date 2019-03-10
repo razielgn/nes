@@ -579,7 +579,6 @@ mod ppu_vbl_nmi {
     /// 08 V N
     /// 09 V N
     #[test]
-    #[ignore]
     fn suppression() {
         run!("roms/ppu_vbl_nmi/suppression.nes");
     }
@@ -600,7 +599,6 @@ mod ppu_vbl_nmi {
     /// 07 -
     /// 08 -
     #[test]
-    #[ignore]
     fn nmi_on_timing() {
         run!("roms/ppu_vbl_nmi/nmi_on_timing.nes");
     }
@@ -622,7 +620,6 @@ mod ppu_vbl_nmi {
     /// 0B N
     /// 0C N
     #[test]
-    #[ignore]
     fn nmi_off_timing() {
         run!("roms/ppu_vbl_nmi/nmi_off_timing.nes");
     }

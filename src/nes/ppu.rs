@@ -219,10 +219,13 @@ impl Ppu {
 
         match (self.frame, self.scanline, self.cycle) {
             // On odd frames, with background enabled, skip one cycle.
-            (Frame::Odd, PRE_RENDER_SCANLINE, 338)
+            (Frame::Odd, PRE_RENDER_SCANLINE, 339)
                 if self.mask.show_background() =>
             {
-                self.cycle += 2;
+                debug!("premature end of odd frame");
+                self.cycle = 0;
+                self.scanline = 0;
+                self.frame = self.frame.next();
             }
             (_, PRE_RENDER_SCANLINE, 340) => {
                 debug!("end of {:?} frame", self.frame);
@@ -242,20 +245,36 @@ impl Ppu {
     }
 
     fn status(&mut self) -> u8 {
-        let status = self.status.as_u8();
-
-        if self.status.is_vblank_set() {
-            self.status.clear_vblank();
-            debug!("vblank reset");
-        }
-
         self.write_toggle = false;
 
-        status | (self.open_bus.as_u8() & 0b0001_1111)
+        let mut ret = self.status.as_u8();
+        if self.status.is_vblank_set() {
+            self.status.clear_vblank();
+            debug!("VBL cleared on PPU STATUS read");
+        }
+
+        if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+            if self.cycle == 2 {
+                self.status.clear_vblank();
+                ret.clear_bit(7);
+            }
+
+            self.nmi_pin.clear();
+        }
+
+        ret | (self.open_bus.as_u8() & 0b0001_1111)
     }
 
     fn status_read_only(&self) -> u8 {
-        self.status.as_u8() | (self.open_bus.as_u8() & 0b0001_1111)
+        let mut ret = self.status.as_u8();
+
+        if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+            if self.cycle == 2 {
+                ret.clear_bit(7);
+            }
+        }
+
+        ret | (self.open_bus.as_u8() & 0b0001_1111)
     }
 
     fn write_to_control(&mut self, val: u8) {
@@ -274,6 +293,13 @@ impl Ppu {
             && self.status.is_vblank_set()
         {
             self.nmi_pin.pull_with_delay(1);
+        }
+
+        if self.scanline == VBLANK_START_SCANLINE
+            && !val.is_bit_set(7)
+            && self.cycle < 5
+        {
+            self.nmi_pin.clear();
         }
     }
 
@@ -767,7 +793,7 @@ mod tests {
         let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 2) {
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 3) {
             ppu.step();
         }
 
@@ -780,7 +806,7 @@ mod tests {
         let mut ppu = Ppu::with_detached_pin();
         assert!(!ppu.read(0x2002).is_bit_set(7));
 
-        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 2) {
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 3) {
             ppu.step();
         }
 
@@ -805,6 +831,37 @@ mod tests {
 
         ppu.nmi_pin.decr_delay();
         assert!(ppu.nmi_pin.is_pulled());
+    }
+
+    #[test]
+    fn writing_to_control_within_vblank_clears_nmi_pin() {
+        for cycle_delay in &[2, 3] {
+            println!("cycle delay: {}", cycle_delay);
+
+            let mut ppu = Ppu::with_detached_pin();
+            ppu.write(0x2000, 0b1000_0000);
+
+            for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + cycle_delay) {
+                ppu.step();
+            }
+            assert!(ppu.nmi_pin.is_pulled());
+
+            ppu.write(0x2000, 0);
+            assert!(!ppu.nmi_pin.is_pulled());
+        }
+    }
+
+    #[test]
+    fn reading_status_exactly_on_vblank_cycle_returns_false() {
+        let mut ppu = Ppu::with_detached_pin();
+        ppu.write(0x2000, 0b1000_0000);
+
+        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 1) {
+            ppu.step();
+        }
+        println!("({}, {})", ppu.scanline, ppu.cycle);
+
+        assert!(!ppu.mut_read(0x2002).is_bit_set(7));
     }
 
     #[test]
