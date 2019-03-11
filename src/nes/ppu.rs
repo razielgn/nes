@@ -248,18 +248,16 @@ impl Ppu {
         self.write_toggle = false;
 
         let mut ret = self.status.as_u8();
-        if self.status.is_vblank_set() {
-            self.status.clear_vblank();
-            debug!("VBL cleared on PPU STATUS read");
-        }
+        self.status.clear_vblank();
 
-        if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+        if self.scanline == VBLANK_START_SCANLINE {
             if self.cycle == 2 {
-                self.status.clear_vblank();
                 ret.clear_bit(7);
             }
 
-            self.nmi_pin.clear();
+            if self.cycle < 5 {
+                self.nmi_pin.clear();
+            }
         }
 
         ret | (self.open_bus.as_u8() & 0b0001_1111)

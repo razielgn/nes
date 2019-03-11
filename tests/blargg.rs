@@ -497,7 +497,6 @@ mod ppu_vbl_nmi {
     /// 07 V -
     /// 08 V -
     #[test]
-    #[ignore]
     fn vbl_set_time() {
         run!("roms/ppu_vbl_nmi/vbl_set_time.nes");
     }
@@ -518,6 +517,7 @@ mod ppu_vbl_nmi {
     /// 07 -
     /// 08 -
     #[test]
+    #[ignore]
     fn vbl_clear_time() {
         run!("roms/ppu_vbl_nmi/vbl_clear_time.nes");
     }
