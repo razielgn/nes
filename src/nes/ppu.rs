@@ -244,37 +244,40 @@ impl Ppu {
         }
     }
 
+    // $2002
+    // NOTE: keep in sync with `status_read_only`.
     fn status(&mut self) -> u8 {
         self.write_toggle = false;
 
         let mut ret = self.status.as_u8();
         self.status.clear_vblank();
 
-        if self.scanline == VBLANK_START_SCANLINE {
+        // tweaking affects test `ppu_vbl_nmi::suppression`.
+        if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+            self.nmi_pin.clear();
+
+            // tweaking affects test `ppu_vbl_nmi::vbl_{set,clear}_time`.
             if self.cycle == 2 {
                 ret.clear_bit(7);
-            }
-
-            if self.cycle < 5 {
-                self.nmi_pin.clear();
             }
         }
 
         ret | (self.open_bus.as_u8() & 0b0001_1111)
     }
 
+    // $2002
+    // NOTE: keep in sync with `status`.
     fn status_read_only(&self) -> u8 {
         let mut ret = self.status.as_u8();
 
-        if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
-            if self.cycle == 2 {
-                ret.clear_bit(7);
-            }
+        if let (VBLANK_START_SCANLINE, 2) = (self.scanline, self.cycle) {
+            ret.clear_bit(7);
         }
 
         ret | (self.open_bus.as_u8() & 0b0001_1111)
     }
 
+    // $2000
     fn write_to_control(&mut self, val: u8) {
         // t: ...BA.. ........ = d: ......BA
         self.temp_vram_addr &= !0b000_1100_0000_0000;
@@ -286,21 +289,20 @@ impl Ppu {
     }
 
     fn nmi_quirk_on_control_write(&mut self, val: u8) {
-        if val.is_bit_set(7)
-            && !self.control.nmi_at_next_vblank()
-            && self.status.is_vblank_set()
-        {
-            self.nmi_pin.pull_with_delay(1);
-        }
-
-        if self.scanline == VBLANK_START_SCANLINE
-            && !val.is_bit_set(7)
-            && self.cycle < 5
-        {
-            self.nmi_pin.clear();
+        if val.is_bit_set(7) {
+            // affects test `ppu_vbl_nmi::nmi_{control,on_timing}`.
+            if !self.control.nmi_at_next_vblank() && self.status.is_vblank_set() {
+                self.nmi_pin.pull_with_delay(1);
+            }
+        } else {
+            // tweaking affects test `ppu_vbl_nmi::nmi_off_timing`.
+            if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+                self.nmi_pin.clear();
+            }
         }
     }
 
+    // $2005
     fn write_to_scroll(&mut self, val: u8) {
         if !self.write_toggle {
             // t: ... .... ...H GFED = d: HGFE D...
@@ -319,6 +321,7 @@ impl Ppu {
         self.write_toggle = !self.write_toggle;
     }
 
+    // $2006
     fn write_to_addr(&mut self, val: u8) {
         if !self.write_toggle {
             // t: .FE DCBA .... .... = d: ..FE DCBA
@@ -337,10 +340,12 @@ impl Ppu {
         self.write_toggle = !self.write_toggle;
     }
 
+    // $2004
     fn read_from_oam(&self) -> u8 {
         self.oam_ram[self.oam_addr as usize]
     }
 
+    // $2004
     fn write_to_oam(&mut self, mut val: u8) {
         match self.scanline {
             0...239 | PRE_RENDER_SCANLINE if self.is_rendering_enabled() => {
@@ -359,6 +364,7 @@ impl Ppu {
         }
     }
 
+    // $2007
     fn mut_read_from_data(&mut self) -> u8 {
         let addr = self.vram_addr;
         let mut val = self.mem_read(addr);
