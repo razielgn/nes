@@ -8,12 +8,6 @@ macro_rules! run {
     };
 }
 
-macro_rules! run_old {
-    ($path:expr) => {
-        crate::run_test_rom_old(include_bytes!($path));
-    };
-}
-
 /// Tests generally print information on screen, but also output information
 /// in other ways, in case the PPU doesn't work or there isn't one, as in an
 /// NSF or a NES emulator early in development.
@@ -658,45 +652,6 @@ mod ppu_vbl_nmi {
     }
 }
 
-mod vbl_nmi_timing {
-    #[test]
-    #[ignore]
-    fn vbl_clear_timing() {
-        run_old!("roms/vbl_nmi_timing/vbl_clear_timing.nes");
-    }
-
-    #[test]
-    fn even_odd_frames() {
-        run_old!("roms/vbl_nmi_timing/even_odd_frames.nes");
-    }
-
-    #[test]
-    fn frame_basics() {
-        run_old!("roms/vbl_nmi_timing/frame_basics.nes");
-    }
-
-    #[test]
-    fn nmi_disable() {
-        run_old!("roms/vbl_nmi_timing/nmi_disable.nes");
-    }
-
-    #[test]
-    fn nmi_suppression() {
-        run_old!("roms/vbl_nmi_timing/nmi_suppression.nes");
-    }
-
-    #[test]
-    #[ignore]
-    fn nmi_timing() {
-        run_old!("roms/vbl_nmi_timing/nmi_timing.nes");
-    }
-
-    #[test]
-    fn vbl_timing() {
-        run_old!("roms/vbl_nmi_timing/vbl_timing.nes");
-    }
-}
-
 const RESET_DELAY: Cycles = 310_000;
 
 fn run_test_rom(buf: &[u8]) {
@@ -731,22 +686,6 @@ fn run_test_rom(buf: &[u8]) {
                 }
                 byte => panic!("exit code: {:02X}\n{}", byte, read_message(&nes)),
             }
-        }
-    }
-}
-
-fn run_test_rom_old(buf: &[u8]) {
-    let mut nes = Nes::from_buf(buf);
-
-    let cycles_per_second = 25 * 341 * 262;
-    for _ in 0..cycles_per_second {
-        nes.step();
-    }
-
-    match nes.read(0xf8) {
-        1 => {} // Passed.
-        exit_code => {
-            panic!("exit code: {:02X}", exit_code);
         }
     }
 }
