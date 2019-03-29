@@ -1,5 +1,4 @@
-use self::AddressingMode::*;
-use self::Label::*;
+use self::{AddressingMode::*, Label::*};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AddressingMode {

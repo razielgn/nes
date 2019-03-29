@@ -1,9 +1,8 @@
-use bits::HighLowBits;
-use instruction::AddressingMode::*;
-use instruction::Label::*;
-use memory::Access;
+use crate::{
+    bits::HighLowBits, instruction::AddressingMode::*, instruction::Label::*,
+    memory::Access, Nes,
+};
 use std::fmt::{self, Display, Formatter};
-use Nes;
 
 pub struct DebugState {
     pub prev: Nes,

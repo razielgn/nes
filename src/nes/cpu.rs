@@ -381,7 +381,7 @@ impl Cpu {
                 self.x = n;
             }
             SHY => {
-                let (mut hi, lo) = self.op_arg.split();
+                let (hi, lo) = self.op_arg.split();
                 let val = self.y & (hi + 1);
 
                 let addr = u16::from_hilo(val, lo);
@@ -420,7 +420,7 @@ impl Cpu {
     }
 
     fn nop<M: MutAccess>(&mut self, mem: &mut M) {
-        use instruction::AddressingMode::*;
+        use crate::instruction::AddressingMode::*;
 
         match self.addr_mode {
             None | Accumulator | Implied | Relative => {}
@@ -680,7 +680,7 @@ impl Cpu {
     }
 
     fn op_arg_from_mode<M: MutAccess>(&mut self, mem: &mut M) {
-        use instruction::AddressingMode::*;
+        use crate::instruction::AddressingMode::*;
 
         let pc = self.pc;
         self.op_arg = match self.addr_mode {
@@ -733,7 +733,7 @@ impl Cpu {
                 }
             }
             IndirectIndexed(dummy_read) => {
-                let mut zero = self.read(pc, mem);
+                let zero = self.read(pc, mem);
                 self.pc += 1;
 
                 let addr = if zero == 0xff {
@@ -757,7 +757,7 @@ impl Cpu {
                 addr.wrapping_add(u16::from(self.y))
             }
             AbsoluteX(dummy_read) => {
-                let mut addr = self.read_word(pc, mem);
+                let addr = self.read_word(pc, mem);
                 self.pc += 2;
 
                 let page_crossed = is_page_crossed(addr, u16::from(self.x));
@@ -774,7 +774,7 @@ impl Cpu {
                 addr.wrapping_add(u16::from(self.x))
             }
             AbsoluteY(dummy_read) => {
-                let mut addr = self.read_word(pc, mem);
+                let addr = self.read_word(pc, mem);
                 self.pc += 2;
 
                 let page_crossed = is_page_crossed(addr, u16::from(self.y));
@@ -905,7 +905,7 @@ impl Into<u8> for P {
 mod test {
     use super::Status::*;
     use super::{Cpu, P};
-    use instruction::AddressingMode::*;
+    use crate::instruction::AddressingMode::*;
 
     #[test]
     fn bit_ops_on_p() {

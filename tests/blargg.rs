@@ -4,13 +4,13 @@ use nes::{Access, Cycles, Nes};
 
 macro_rules! run {
     ($path:expr) => {
-        ::run_test_rom(include_bytes!($path));
+        crate::run_test_rom(include_bytes!($path));
     };
 }
 
 macro_rules! run_old {
     ($path:expr) => {
-        ::run_test_rom_old(include_bytes!($path));
+        crate::run_test_rom_old(include_bytes!($path));
     };
 }
 

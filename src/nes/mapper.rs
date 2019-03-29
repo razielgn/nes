@@ -1,5 +1,4 @@
-use bits::HighLowBits;
-use rom::Rom;
+use crate::{bits::HighLowBits, rom::Rom};
 
 #[derive(Clone)]
 pub struct Mapper {
