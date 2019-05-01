@@ -1,5 +1,6 @@
 extern crate nes;
 
+use colored::*;
 use nes::{Access, Cycles, Nes};
 
 macro_rules! run {
@@ -675,7 +676,7 @@ fn run_test_rom(buf: &[u8]) {
             match nes.read(0x6000u16) {
                 0x00 => {
                     // passed
-                    println!("{}", read_message(&nes));
+                    println!("{}", read_message(&nes).green());
                     break;
                 }
                 0x80 => {} // still running
@@ -684,7 +685,10 @@ fn run_test_rom(buf: &[u8]) {
                         reset_delay = Some(RESET_DELAY);
                     }
                 }
-                byte => panic!("exit code: {:02X}\n{}", byte, read_message(&nes)),
+                byte => {
+                    println!("{}", read_message(&nes).red());
+                    panic!("{}", format!("exit code: {:02X}", byte).red());
+                }
             }
         }
     }
