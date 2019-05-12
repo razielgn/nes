@@ -15,6 +15,7 @@ mod pin;
 mod ppu;
 mod rom;
 
+use bits::BitOps;
 pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
 use mapper::Mapper;
@@ -22,7 +23,10 @@ pub use memory::{Access, Memory, MutMemory, Ram};
 use pin::Pin;
 use ppu::Ppu;
 pub use rom::{Mirroring, Rom};
-use std::path::Path;
+use std::{
+    io::{self, Cursor, Write},
+    path::Path,
+};
 
 #[derive(Clone)]
 pub struct Nes {
@@ -53,6 +57,8 @@ impl Nes {
     }
 
     pub fn from_rom(rom: Rom) -> Self {
+        info!("Mapper ID: {:03}", rom.mapper_id);
+
         let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
         let nmi_pin = Pin::default();
@@ -82,10 +88,81 @@ impl Nes {
         };
 
         for _ in 0..cycles * 3 {
-            self.ppu.step();
+            self.ppu.step(&mut self.mapper);
         }
 
         cycles
+    }
+
+    pub fn dump_debug(&self) {
+        self.ppu.debug_sprites();
+    }
+
+    pub fn render_screen(&self, buf: &mut [u8]) -> io::Result<()> {
+        debug_assert_eq!(256 * 240 * 3, buf.len());
+
+        let mut cur = Cursor::new(buf);
+
+        for color_idx in self.ppu.screen().iter() {
+            let color = ppu::COLORS[*color_idx as usize % 64];
+            cur.write_all(&color.to_be_bytes()[1..])?;
+        }
+
+        Ok(())
+    }
+
+    pub fn render_palette(&self, buf: &mut [u8]) -> io::Result<()> {
+        debug_assert_eq!(32 * 3, buf.len());
+
+        let palette = self.ppu.palette();
+
+        let mut cur = Cursor::new(buf);
+        for color_idx in palette.iter() {
+            let color = ppu::COLORS[*color_idx as usize % 64];
+            cur.write_all(&color.to_be_bytes()[1..])?;
+        }
+
+        Ok(())
+    }
+
+    pub fn render_chr_left(&self, buf: &mut [u8]) -> io::Result<()> {
+        self.render_chr(0x0000, buf)
+    }
+
+    pub fn render_chr_right(&self, buf: &mut [u8]) -> io::Result<()> {
+        self.render_chr(0x1000, buf)
+    }
+
+    pub fn render_chr(&self, offset: u16, buf: &mut [u8]) -> io::Result<()> {
+        debug_assert_eq!(128 * 128 * 3, buf.len());
+
+        let palette = self.ppu.palette();
+
+        let mut cur = Cursor::new(buf);
+
+        // Grid is 16x16;
+        // Each cell is 8x8;
+        for n in 0u16..0x100 {
+            let (y, x) = (u64::from(n) / 16, u64::from(n) % 16);
+            let addr = n * 16;
+            let bytes = self.mapper.read_multi(offset + addr, 16);
+
+            for (i, (lo, hi)) in
+                bytes[..8].iter().zip(bytes[8..].iter()).enumerate()
+            {
+                let idx = (y * (128 * 8) + (i as u64) * 128) + (x * 8);
+                cur.set_position(idx * 3);
+
+                for b in (0..8).rev() {
+                    let palette_idx = lo.get_bit(b) | (hi.get_bit(b) << 1);
+                    let color_idx = palette[palette_idx as usize];
+                    let color = ppu::COLORS[color_idx as usize];
+                    cur.write_all(&color.to_be_bytes()[1..])?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn reset(&mut self) {
