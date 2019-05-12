@@ -1,5 +1,6 @@
 extern crate nes;
 
+use log::*;
 use nes::Nes;
 use sdl2::{
     event::Event,
@@ -11,7 +12,7 @@ use std::env;
 use std::time::Duration;
 
 fn main() {
-    env_logger::init();
+    init_logger();
 
     let path = env::args().nth(1).unwrap();
     let mut nes = Nes::from_path(path);
@@ -140,4 +141,11 @@ fn main() {
 
         // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
+}
+
+fn init_logger() {
+    use simplelog::*;
+
+    TermLogger::init(LevelFilter::Info, Config::default())
+        .expect("failed to init terminal logger");
 }

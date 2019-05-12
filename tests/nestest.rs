@@ -1,12 +1,9 @@
-extern crate env_logger;
 extern crate nes;
 
 use nes::Nes;
 
 #[test]
 fn nestest() {
-    env_logger::init();
-
     let mut nes = Nes::from_buf(include_bytes!("roms/nestest.nes"));
     nes.set_pc(0xC000);
 
