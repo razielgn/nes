@@ -1,7 +1,3 @@
-#[macro_use]
-extern crate nom;
-#[macro_use]
-extern crate log;
 #[cfg(test)]
 extern crate pretty_assertions;
 
@@ -18,6 +14,7 @@ mod rom;
 use bits::BitOps;
 pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
+use log::*;
 use mapper::Mapper;
 pub use memory::{Access, Memory, MutMemory, Ram};
 use pin::Pin;

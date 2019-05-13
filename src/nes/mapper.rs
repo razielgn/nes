@@ -2,6 +2,7 @@ use crate::{
     memory::{Access, MutAccess},
     rom::Rom,
 };
+use log::*;
 
 #[derive(Clone)]
 pub struct Mapper {

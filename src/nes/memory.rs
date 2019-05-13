@@ -1,4 +1,5 @@
 use crate::{bits::HighLowBits, mapper::Mapper, ppu::Ppu};
+use log::*;
 
 pub trait MutAccess {
     fn mut_read(&mut self, addr: u16) -> u8;

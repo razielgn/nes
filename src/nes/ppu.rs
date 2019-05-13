@@ -1,5 +1,6 @@
 use self::{MasterSlaveSelect::*, SpriteSize::*, VRamAddrIncr::*};
 use crate::{bits::BitOps, memory::MutAccess, pin::Pin};
+use log::*;
 use std::mem;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
