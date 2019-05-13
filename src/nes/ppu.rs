@@ -272,16 +272,6 @@ impl Ppu {
                             self.draw_pixel();
                             self.load_tiles(mapper);
 
-                            // let x = (self.cycle - 1) / 8;
-                            // let y = self.scanline / 8;
-                            // if let (3, 4) | (9, 16) | (5, 24) = (x, y) {
-                            //     if (self.cycle - 1) % 8 == 0
-                            //         && self.scanline % 8 == 0
-                            //     {
-                            //         self.debug_cycle();
-                            //     }
-                            // }
-
                             if self.cycle % 8 == 0 {
                                 self.vram_addr.increment_x();
                             }
@@ -364,45 +354,6 @@ impl Ppu {
             }
         }
     }
-
-    // fn load_tiles<M: MutAccess>(&mut self, mapper: &mut M) {
-    //     match (self.cycle - 1) % 8 {
-    //         0 => {
-    //             self.previous_tile = self.current_tile;
-    //             self.current_tile = self.next_tile;
-
-    //             self.shift_lo |= u16::from(self.next_tile.lo);
-    //             self.shift_hi |= u16::from(self.next_tile.hi);
-
-    //             let idx = self.mem_read(self.vram_addr.tile_addr(), mapper);
-
-    //             // 000P 0000 IIII 0YYY
-    //             //    |      ||||  |||
-    //             //    |      ||||  +++- fine Y scroll
-    //             //    |      ++++------ index
-    //             //    +---------------- bg pattern table addr
-    //             self.next_tile.addr = u16::from(idx) << 4
-    //                 | self.vram_addr.fine_y_scroll()
-    //                 | self.control.background_pattern_table_addr();
-    //         }
-    //         2 => {
-    //             let shift = (self.vram_addr.get() >> 4) & 0x04
-    //                 | (self.vram_addr.get() & 0x02);
-
-    //             let attr = self.mem_read(self.vram_addr.attribute_addr(), mapper);
-    //             self.next_tile.palette_offset =
-    //                 u16::from((attr >> shift) & 0x03) << 2;
-    //         }
-    //         3 => {
-    //             self.next_tile.lo = self.mem_read(self.next_tile.addr, mapper);
-    //         }
-    //         5 => {
-    //             self.next_tile.hi =
-    //                 self.mem_read(self.next_tile.addr.wrapping_add(8), mapper);
-    //         }
-    //         _ => {}
-    //     }
-    // }
 
     fn load_tiles<M: MutAccess>(&mut self, mapper: &mut M) {
         self.tile_data <<= 4;
@@ -654,6 +605,7 @@ impl Ppu {
         self.inc_vram_addr();
     }
 
+    #[allow(unused)]
     fn debug_cycle(&self) {
         debug!("vram addr: {:04X}", self.vram_addr.get());
         debug!("nametable: {}", self.vram_addr.nametable_idx());

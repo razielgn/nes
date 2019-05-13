@@ -1,6 +1,5 @@
 extern crate nes;
 
-use log::*;
 use nes::Nes;
 use sdl2::{
     event::Event,
@@ -9,7 +8,6 @@ use sdl2::{
     rect::Rect,
 };
 use std::env;
-use std::time::Duration;
 
 fn main() {
     init_logger();
@@ -138,8 +136,6 @@ fn main() {
             .expect("failed to render chr right texture");
 
         canvas.present();
-
-        // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
