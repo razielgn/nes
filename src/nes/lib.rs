@@ -55,15 +55,20 @@ impl Nes {
 
     pub fn from_rom(rom: Rom) -> Self {
         info!("Mapper ID: {:03}", rom.mapper_id);
+        info!("Mirroring: {:?}", rom.mirroring);
 
         let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
         let nmi_pin = Pin::default();
 
+        let cpu = Cpu::with_pc_and_nmi_pin(pc, nmi_pin.clone());
+        let mut ppu = Ppu::new(nmi_pin);
+        ppu.set_mirroring(mapper.rom.mirroring);
+
         Self {
-            cpu: Cpu::with_pc_and_nmi_pin(pc, nmi_pin.clone()),
+            cpu,
             mapper,
-            ppu: Ppu::new(nmi_pin),
+            ppu,
             ram: Ram::default(),
         }
     }

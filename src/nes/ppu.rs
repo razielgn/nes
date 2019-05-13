@@ -1,5 +1,5 @@
 use self::{MasterSlaveSelect::*, SpriteSize::*, VRamAddrIncr::*};
-use crate::{bits::BitOps, memory::MutAccess, pin::Pin};
+use crate::{bits::BitOps, memory::MutAccess, pin::Pin, rom::Mirroring};
 use log::*;
 use std::mem;
 
@@ -137,6 +137,8 @@ pub struct Ppu {
 
     current_screen: [u8; 256 * 240],
     prev_screen: [u8; 256 * 240],
+
+    mirroring: Mirroring,
 }
 
 impl Ppu {
@@ -165,7 +167,12 @@ impl Ppu {
             tile_data: 0,
             current_screen: [0; 256 * 240],
             prev_screen: [0; 256 * 240],
+            mirroring: Mirroring::Vertical,
         }
+    }
+
+    pub fn set_mirroring(&mut self, mirroring: Mirroring) {
+        self.mirroring = mirroring;
     }
 
     pub fn mut_read<M: MutAccess>(&mut self, addr: u16, mapper: &mut M) -> u8 {
@@ -593,20 +600,8 @@ impl Ppu {
             // Pattern Tables
             0x0000...0x1FFF => mapper.mut_read(addr),
 
-            // Nametable 0
-            0x2000...0x23FF => self.vram[(addr - 0x2000) as usize],
-
-            // Nametable 1
-            0x2400...0x27FF => self.vram[(addr - 0x2400) as usize],
-
-            // Nametable 2
-            0x2800...0x2BFF => self.vram[(addr - 0x2400) as usize],
-
-            // Nametable 3
-            0x2C00...0x2FFF => self.vram[(addr - 0x2800) as usize],
-
-            // Mirror of 0x2000...0x2EFF
-            0x3000...0x3EFF => self.mem_read(0x2000 + (addr % 0xEF00), mapper),
+            // Nametables
+            0x2000...0x3EFF => self.vram[self.resolve_address(addr)],
 
             // Mirrored palette RAM indexes
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
@@ -628,6 +623,28 @@ impl Ppu {
 
             _ => unimplemented!("reading from 0x4000"),
         }
+    }
+
+    fn resolve_address(&self, addr: u16) -> usize {
+        use self::Mirroring::*;
+
+        let addr = (addr as usize - 0x2000) % 0x1000;
+        let table = addr / 0x0400;
+        let offset = addr % 0x0400;
+
+        let factor = match (self.mirroring, table) {
+            (Horizontal, 0) => 0,
+            (Horizontal, 1) => 0,
+            (Horizontal, 2) => 1,
+            (Horizontal, 3) => 1,
+            (Vertical, 0) => 0,
+            (Vertical, 1) => 1,
+            (Vertical, 2) => 0,
+            (Vertical, 3) => 1,
+            _ => unreachable!(),
+        };
+
+        (0x2000 + factor * 0x040 + offset) % 0x800
     }
 
     fn write_to_data(&mut self, val: u8) {
@@ -662,22 +679,8 @@ impl Ppu {
             // Pattern Table 1
             0x1000...0x1FFF => (),
 
-            // Nametable 0
-            0x2000...0x23FF => self.vram[(addr - 0x2000) as usize] = val,
-
-            // Nametable 1
-            0x2400...0x27FF => self.vram[(addr - 0x2400) as usize] = val,
-
-            // Nametable 2
-            0x2800...0x2BFF => self.vram[(addr - 0x2400) as usize] = val,
-
-            // Nametable 3
-            0x2C00...0x2FFF => self.vram[(addr - 0x2800) as usize] = val,
-
-            // Mirror of 0x2000...0x2EFF
-            0x3000...0x3EFF => {
-                self.mem_write(0x2000 + (addr % 0xEF00), val);
-            }
+            // Nametables
+            0x2000...0x3EFF => self.vram[self.resolve_address(addr)] = val,
 
             // Mirrored palette RAM indexes
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {

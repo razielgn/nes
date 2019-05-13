@@ -6,7 +6,7 @@ use log::*;
 
 #[derive(Clone)]
 pub struct Mapper {
-    rom: Rom,
+    pub rom: Rom,
     banks: usize,
     bank1: usize,
     bank2: usize,
