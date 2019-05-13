@@ -246,7 +246,7 @@ impl Ppu {
 
         match (self.scanline, self.cycle) {
             (VBLANK_START_SCANLINE, 1) => {
-                // debug!("vblank starts");
+                trace!("vblank starts");
 
                 mem::swap(&mut self.current_screen, &mut self.prev_screen);
                 self.status.set_vblank();
@@ -257,7 +257,7 @@ impl Ppu {
             }
 
             (PRE_RENDER_SCANLINE, 1) => {
-                // debug!("vblank ends");
+                trace!("vblank ends");
                 self.status.clear_vblank();
             }
             _ => (),
@@ -343,19 +343,19 @@ impl Ppu {
             (Frame::Odd, PRE_RENDER_SCANLINE, 339)
                 if self.mask.show_background() =>
             {
-                debug!("premature end of odd frame");
+                trace!("premature end of odd frame");
                 self.cycle = 0;
                 self.scanline = 0;
                 self.frame = self.frame.next();
             }
             (_, PRE_RENDER_SCANLINE, 340) => {
-                debug!("end of {:?} frame", self.frame);
+                trace!("end of {:?} frame", self.frame);
                 self.cycle = 0;
                 self.scanline = 0;
                 self.frame = self.frame.next();
             }
             (_, _, 340) => {
-                // debug!("end of scanline {}", self.scanline);
+                trace!("end of scanline {}", self.scanline);
                 self.cycle = 0;
                 self.scanline += 1;
             }
@@ -834,7 +834,8 @@ impl VRamAddr {
     }
 
     pub fn set(&mut self, val: u16) {
-        debug!("vram set to {:04x}", val);
+        trace!("vram set to {:04x}", val);
+
         self.0 = val;
     }
 
