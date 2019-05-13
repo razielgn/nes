@@ -285,21 +285,24 @@ impl Ppu {
                             self.vram_addr.copy_x(self.temp_vram_addr);
                         }
 
-                        // The first two tiles for the next scanline are fetched and
-                        // loaded into the shift registers.
+                        // First two tiles on next scanline.
                         321...336 => {
                             self.load_tiles(mapper);
+
+                            if self.cycle % 8 == 0 {
+                                self.vram_addr.increment_x();
+                            }
                         }
 
-                        // Two bytes are fetched, but the purpose for this is unknown.
-                        // 337 | 339 => {
-                        // let addr = self.vram_addr.nametable_addr();
-                        // let _ = self.mem_read(addr, mapper);
-                        // }
+                        // Unused nametable fetches.
+                        337 | 339 => {
+                            let addr = self.vram_addr.nametable_addr();
+                            let _ = self.mem_read(addr, mapper);
+                        }
                         _ => {}
                     }
 
-                    // self.oam.sprite_evaluation(self.cycle, self.frame);
+                    // TODO: sprite evaluation.
                 }
                 PRE_RENDER_SCANLINE => match self.cycle {
                     1...256 => {
@@ -321,6 +324,10 @@ impl Ppu {
                     }
                     321...336 => {
                         self.load_tiles(mapper);
+
+                        if self.cycle % 8 == 0 {
+                            self.vram_addr.increment_x();
+                        }
                     }
                     _ => {}
                 },
