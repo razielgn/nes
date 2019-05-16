@@ -28,6 +28,8 @@ use std::{
     path::Path,
 };
 
+const CYCLES_FULL_FRAME: usize = 341 * 262;
+
 #[derive(Clone)]
 pub struct Nes {
     cpu: Cpu,
@@ -103,6 +105,12 @@ impl Nes {
         }
 
         cycles
+    }
+
+    pub fn step_frame(&mut self) {
+        for _ in 0..CYCLES_FULL_FRAME {
+            self.step();
+        }
     }
 
     pub fn dump_debug(&self) {

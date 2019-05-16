@@ -7,8 +7,6 @@ use sdl2::{
     EventPump,
 };
 
-const CYCLES_FULL_FRAME: usize = 341 * 262;
-
 pub fn run(nes: Nes, debug: bool, scale: u32) {
     if debug {
         run_debug(nes, scale);
@@ -44,9 +42,7 @@ fn run_normal(mut nes: Nes, scale: u32) {
             break;
         }
 
-        for _ in 0..CYCLES_FULL_FRAME {
-            nes.step();
-        }
+        nes.step_frame();
 
         screen
             .with_lock(None, |buf, _pitch| {
@@ -129,9 +125,7 @@ fn run_debug(mut nes: Nes, scale: u32) {
             break;
         }
 
-        for _ in 0..CYCLES_FULL_FRAME {
-            nes.step();
-        }
+        nes.step_frame();
 
         chr_left
             .with_lock(None, |buf, _pitch| {
