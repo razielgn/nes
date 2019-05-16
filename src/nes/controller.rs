@@ -1,5 +1,4 @@
 use crate::bits::BitOps;
-use log::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Button {
@@ -43,6 +42,7 @@ impl Controller {
 
     pub fn write(&mut self, val: u8) {
         self.strobe = val.is_bit_set(0);
+
         if self.strobe {
             self.idx = 0;
         }
