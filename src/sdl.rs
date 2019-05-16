@@ -1,9 +1,10 @@
-use nes::Nes;
+use nes::{Button, Nes};
 use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
+    EventPump,
 };
 
 const CYCLES_FULL_FRAME: usize = 341 * 262;
@@ -38,16 +39,9 @@ fn run_normal(mut nes: Nes, scale: u32) {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    'running: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'running,
-                _ => {}
-            }
+    loop {
+        if handle_input(&mut nes, &mut event_pump) {
+            break;
         }
 
         for _ in 0..CYCLES_FULL_FRAME {
@@ -130,16 +124,9 @@ fn run_debug(mut nes: Nes, scale: u32) {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    'running: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'running,
-                _ => {}
-            }
+    loop {
+        if handle_input(&mut nes, &mut event_pump) {
+            break;
         }
 
         for _ in 0..CYCLES_FULL_FRAME {
@@ -191,4 +178,117 @@ fn run_debug(mut nes: Nes, scale: u32) {
 
         canvas.present();
     }
+}
+
+fn handle_input(nes: &mut Nes, event_pump: &mut EventPump) -> bool {
+    for event in event_pump.poll_iter() {
+        match event {
+            Event::Quit { .. }
+            | Event::KeyDown {
+                keycode: Some(Keycode::Escape),
+                ..
+            } => {
+                return true;
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::Down),
+                ..
+            } => {
+                nes.controller_set(Button::Down);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::Down),
+                ..
+            } => {
+                nes.controller_unset(Button::Down);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::Up),
+                ..
+            } => {
+                nes.controller_set(Button::Up);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::Up),
+                ..
+            } => {
+                nes.controller_unset(Button::Up);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::Right),
+                ..
+            } => {
+                nes.controller_set(Button::Right);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::Right),
+                ..
+            } => {
+                nes.controller_unset(Button::Right);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::Left),
+                ..
+            } => {
+                nes.controller_set(Button::Left);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::Left),
+                ..
+            } => {
+                nes.controller_unset(Button::Left);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::Return),
+                ..
+            } => {
+                nes.controller_set(Button::Start);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::Return),
+                ..
+            } => {
+                nes.controller_unset(Button::Start);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::RShift),
+                ..
+            } => {
+                nes.controller_set(Button::Select);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::RShift),
+                ..
+            } => {
+                nes.controller_unset(Button::Select);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::A),
+                ..
+            } => {
+                nes.controller_set(Button::A);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::A),
+                ..
+            } => {
+                nes.controller_unset(Button::A);
+            }
+            Event::KeyUp {
+                keycode: Some(Keycode::S),
+                ..
+            } => {
+                nes.controller_set(Button::B);
+            }
+            Event::KeyDown {
+                keycode: Some(Keycode::S),
+                ..
+            } => {
+                nes.controller_unset(Button::B);
+            }
+            _ => {}
+        }
+    }
+
+    false
 }

@@ -2,6 +2,7 @@
 extern crate pretty_assertions;
 
 mod bits;
+mod controller;
 mod cpu;
 mod debug;
 mod instruction;
@@ -12,6 +13,8 @@ mod ppu;
 mod rom;
 
 use bits::BitOps;
+pub use controller::Button;
+use controller::Controller;
 pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
 use log::*;
@@ -31,6 +34,8 @@ pub struct Nes {
     mapper: Mapper,
     ppu: Ppu,
     ram: Ram,
+    controller1: Controller,
+    controller2: Controller,
 }
 
 macro_rules! mut_memory {
@@ -39,6 +44,8 @@ macro_rules! mut_memory {
             ram: &mut $self.ram,
             mapper: &mut $self.mapper,
             ppu: &mut $self.ppu,
+            controller1: &mut $self.controller1,
+            controller2: &mut $self.controller2,
         }
     };
 }
@@ -70,6 +77,8 @@ impl Nes {
             mapper,
             ppu,
             ram: Ram::default(),
+            controller1: Controller::default(),
+            controller2: Controller::default(),
         }
     }
 
@@ -98,6 +107,18 @@ impl Nes {
 
     pub fn dump_debug(&self) {
         self.ppu.debug_sprites();
+    }
+
+    pub fn controller_set(&mut self, button: Button) {
+        trace!("set button: {:?}", button);
+        self.controller1.set_button(button);
+        self.controller2.set_button(button);
+    }
+
+    pub fn controller_unset(&mut self, button: Button) {
+        trace!("unset button: {:?}", button);
+        self.controller1.unset_button(button);
+        self.controller2.unset_button(button);
     }
 
     pub fn render_screen(&self, buf: &mut [u8]) -> io::Result<()> {

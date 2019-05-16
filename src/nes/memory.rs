@@ -1,4 +1,6 @@
-use crate::{bits::HighLowBits, mapper::Mapper, ppu::Ppu};
+use crate::{
+    bits::HighLowBits, controller::Controller, mapper::Mapper, ppu::Ppu,
+};
 use log::*;
 
 pub trait MutAccess {
@@ -70,6 +72,8 @@ pub struct MutMemory<'a> {
     pub ram: &'a mut Ram,
     pub mapper: &'a mut Mapper,
     pub ppu: &'a mut Ppu,
+    pub controller1: &'a mut Controller,
+    pub controller2: &'a mut Controller,
 }
 
 impl<'a> MutMemory<'a> {
@@ -88,8 +92,12 @@ impl<'a> MutAccess for MutMemory<'a> {
         let read = match addr {
             0x0000...0x1FFF => self.ram.read(addr),
             0x2000...0x3FFF => self.ppu.mut_read(addr, self.mapper),
-            0x4000...0x401F => 0xFF, // TODO read from I/O registers
-            0x4020...0xFFFF => self.mapper.mut_read(addr),
+            0x4000...0x4014 => 0xFF, // TODO read from I/O registers
+            0x4015 => 0,             // TODO: APU.
+            0x4016 => self.controller1.read(),
+            0x4017 => self.controller1.read(),
+            0x4018...0x5FFF => 0, // TODO: I/O registers.
+            0x6000...0xFFFF => self.mapper.mut_read(addr),
         };
 
         debug!("read {:04x} => {:02x}", addr, read);
@@ -103,7 +111,13 @@ impl<'a> MutAccess for MutMemory<'a> {
             0x2000...0x3FFF => self.ppu.write(addr, val),
             0x4000...0x4013 => (),
             0x4014 => self.dma_transfer(val),
-            0x4015...0x401F => (), // TODO write to I/O registers
+            0x4015 => (), // TODO: APU.
+            0x4016 => {
+                self.controller1.write(val);
+                self.controller2.write(val);
+            }
+            0x4017 => (),          // TODO: APU.
+            0x4018...0x401F => (), // TODO write to I/O registers
             0x4020...0xFFFF => self.mapper.write(addr, val),
         }
     }
