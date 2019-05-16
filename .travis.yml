@@ -1,5 +1,12 @@
 language: rust
 cache: cargo
 
+before_install:
+  - sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libsdl2-dev
+
+addons:
+  apt:
+    update: true
+
 rust:
   - stable
