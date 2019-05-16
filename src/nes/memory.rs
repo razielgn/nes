@@ -1,4 +1,5 @@
 use crate::{bits::HighLowBits, mapper::Mapper, ppu::Ppu};
+use log::*;
 
 pub trait MutAccess {
     fn mut_read(&mut self, addr: u16) -> u8;
@@ -86,9 +87,9 @@ impl<'a> MutAccess for MutMemory<'a> {
     fn mut_read(&mut self, addr: u16) -> u8 {
         let read = match addr {
             0x0000...0x1FFF => self.ram.read(addr),
-            0x2000...0x3FFF => self.ppu.mut_read(addr),
+            0x2000...0x3FFF => self.ppu.mut_read(addr, self.mapper),
             0x4000...0x401F => 0xFF, // TODO read from I/O registers
-            0x4020...0xFFFF => self.mapper.read(addr),
+            0x4020...0xFFFF => self.mapper.mut_read(addr),
         };
 
         debug!("read {:04x} => {:02x}", addr, read);

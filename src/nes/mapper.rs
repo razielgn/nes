@@ -1,8 +1,12 @@
-use crate::{bits::HighLowBits, rom::Rom};
+use crate::{
+    memory::{Access, MutAccess},
+    rom::Rom,
+};
+use log::*;
 
 #[derive(Clone)]
 pub struct Mapper {
-    rom: Rom,
+    pub rom: Rom,
     banks: usize,
     bank1: usize,
     bank2: usize,
@@ -19,12 +23,21 @@ impl Mapper {
             bank2: banks.saturating_sub(1),
         }
     }
+}
 
-    pub fn read(&self, addr: u16) -> u8 {
+impl Access for Mapper {
+    fn read(&self, addr: u16) -> u8 {
         let addr = addr as usize;
 
         match addr {
-            0x4020...0x5FFF => self.rom.chr[addr - 0x4020],
+            0x0000...0x1FFF => {
+                if let Some(val) = self.rom.chr.get(addr) {
+                    *val
+                } else {
+                    error!("out of bound CHR read at ${:04x}", addr);
+                    0
+                }
+            }
             0x6000...0x7FFF => self.rom.sram[addr - 0x6000],
             0x8000...0xBFFF => {
                 let idx = self.bank1 * 0x4000 + (addr - 0x8000);
@@ -34,17 +47,17 @@ impl Mapper {
                 let idx = self.bank2 * 0x4000 + (addr - 0xC000);
                 self.rom.prg[idx]
             }
-            _ => unreachable!(),
+            _ => unreachable!("mapper: accessed 0x{:04X}", addr),
         }
     }
+}
 
-    pub fn read_word(&self, addr: u16) -> u16 {
-        let lo = self.read(addr);
-        let hi = self.read(addr.wrapping_add(1));
-        u16::from_hilo(hi, lo)
+impl MutAccess for Mapper {
+    fn mut_read(&mut self, addr: u16) -> u8 {
+        self.read(addr)
     }
 
-    pub fn write(&mut self, addr: u16, val: u8) {
+    fn write(&mut self, addr: u16, val: u8) {
         let addr = addr as usize;
 
         match addr {

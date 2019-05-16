@@ -5,6 +5,7 @@ use crate::{
     memory::MutAccess,
     pin::Pin,
 };
+use log::*;
 
 const NMI_VECTOR: u16 = 0xFFFA;
 const RESET_VECTOR: u16 = 0xFFFC;
