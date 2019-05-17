@@ -106,7 +106,8 @@ pub struct Ppu {
     ///            pre-render line.
     status: Status,
 
-    oam: OAM,
+    oam_addr: u8,
+    oam_data: [u8; 256],
 
     /// $2005 w x2
     scroll: u8,
@@ -150,7 +151,8 @@ impl Ppu {
             cycle: 0,
             scanline: PRE_RENDER_SCANLINE,
             frame: Frame::Even,
-            oam: OAM::default(),
+            oam_addr: 0,
+            oam_data: [0; 256],
             vram: [0; 0x800],
             palette_ram: PALETTE_RAM_AT_BOOT,
             scroll: 0,
@@ -211,7 +213,7 @@ impl Ppu {
             0x2000 => self.write_to_control(val),
             0x2001 => self.mask.set(val),
             0x2002 => (),
-            0x2003 => self.oam.set_addr(val),
+            0x2003 => self.oam_addr = val,
             0x2004 => self.write_to_oam(val),
             0x2005 => self.write_to_scroll(val),
             0x2006 => self.write_to_addr(val),
@@ -220,10 +222,6 @@ impl Ppu {
         }
 
         self.open_bus.refresh();
-    }
-
-    pub fn debug_sprites(&self) {
-        self.oam.print_sprites();
     }
 
     pub fn screen(&self) -> &[u8] {
@@ -524,17 +522,22 @@ impl Ppu {
 
     // $2004
     fn read_from_oam(&self) -> u8 {
-        self.oam.read()
+        self.oam_data[self.oam_addr as usize]
     }
 
     // $2004
-    fn write_to_oam(&mut self, val: u8) {
+    fn write_to_oam(&mut self, mut val: u8) {
         match self.scanline {
             0...239 | PRE_RENDER_SCANLINE if self.is_rendering_enabled() => {
                 // TODO(low): glitchy OAM increment by bumping only the high 6 bits of OAMADDR.
             }
             _ => {
-                self.oam.write(val);
+                if self.oam_addr & 0x03 == 0x02 {
+                    val &= 0xE3;
+                }
+
+                self.oam_data[self.oam_addr as usize] = val;
+                self.oam_addr = self.oam_addr.wrapping_add(1);
             }
         }
     }
@@ -681,93 +684,6 @@ impl Ppu {
 
     fn is_rendering_enabled(&self) -> bool {
         self.mask.show_background() || self.mask.show_sprites()
-    }
-}
-
-#[derive(Clone, Copy)]
-struct OAM {
-    addr: u8,
-    primary: [u8; 256],
-    secondary: [u8; 32],
-
-    bitmap_shifts1: [u8; 8],
-    bitmap_shifts2: [u8; 8],
-    latches: [u8; 8],
-    counters: [u8; 8],
-}
-
-impl Default for OAM {
-    fn default() -> Self {
-        OAM {
-            addr: 0,
-            primary: [0; 256],
-            secondary: [0; 32],
-            bitmap_shifts1: [0; 8],
-            bitmap_shifts2: [0; 8],
-            latches: [0; 8],
-            counters: [0; 8],
-        }
-    }
-}
-
-impl OAM {
-    // fn sprite_at_idx(&self, idx: usize) -> Sprite {
-    //     unimplemented!()
-    // }
-
-    fn print_sprites(&self) {
-        println!("Sprites:");
-
-        for n in 0..64 {
-            let idx = n * 4;
-            let y_pos = self.primary[idx];
-            let x_pos = self.primary[idx + 3];
-            let attrs = self.primary[idx + 2];
-            let palette = attrs & 0b11;
-            let priority = !attrs.is_bit_set(5);
-            let flip_hor = attrs.is_bit_set(6);
-            let flip_ver = attrs.is_bit_set(7);
-            println!(
-                "#{:02}: pos ({:02x}, {:02x}), palette {:02}, front: {:>5}, flip_hor: {:>5}, flip_ver: {:>5}",
-                n, y_pos, x_pos, palette, priority, flip_hor, flip_ver
-            );
-        }
-    }
-
-    fn set_addr(&mut self, addr: u8) {
-        self.addr = addr;
-    }
-
-    fn read(&self) -> u8 {
-        self.primary[self.addr as usize]
-    }
-
-    fn write(&mut self, mut val: u8) {
-        if self.addr & 0x03 == 0x02 {
-            val &= 0xE3;
-        }
-        self.primary[self.addr as usize] = val;
-        self.addr = self.addr.wrapping_add(1);
-    }
-
-    fn sprite_evaluation(&mut self, cycle: u16, frame: Frame) {
-        match cycle {
-            1...64 => {
-                let idx = (cycle as usize - 1) >> 1;
-                self.secondary[idx] = 0xFF;
-            }
-            65...256 => {
-                if let Frame::Odd = frame {
-                    // TODO: now what?
-                    // self.latch = self.read();
-                } else {
-                    // TODO: now what?
-                }
-            }
-            257...320 => {}
-            0 | 321...340 => {}
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -1112,33 +1028,6 @@ mod tests {
         }
     }
 
-    mod oam {
-        use super::super::*;
-
-        #[test]
-        fn write_and_read() {
-            let mut oam = OAM::default();
-
-            oam.set_addr(0x00);
-            oam.write(0xFF);
-            oam.write(0xFE);
-            oam.write(0xFD);
-            oam.write(0xFC);
-
-            oam.set_addr(0x00);
-            assert_eq!(0xFF, oam.read());
-
-            oam.set_addr(0x01);
-            assert_eq!(0xFE, oam.read());
-
-            oam.set_addr(0x02);
-            assert_eq!(0xFD & 0xE3, oam.read());
-
-            oam.set_addr(0x03);
-            assert_eq!(0xFC, oam.read());
-        }
-    }
-
     struct DummyMapper;
 
     impl MutAccess for DummyMapper {
@@ -1419,5 +1308,28 @@ mod tests {
             0xA0 & open_bus_filter_mask,
             ppu.mut_read(0x2007, &mut mapper) & open_bus_filter_mask
         );
+    }
+
+    #[test]
+    fn write_and_read_oam() {
+        let (mut ppu, _) = build_ppu();
+
+        ppu.write(0x2003, 0x00);
+        ppu.write(0x2004, 0xFF);
+        ppu.write(0x2004, 0xFE);
+        ppu.write(0x2004, 0xFD);
+        ppu.write(0x2004, 0xFC);
+
+        ppu.write(0x2003, 0x00);
+        assert_eq!(0xFF, ppu.read(0x2004));
+
+        ppu.write(0x2003, 0x01);
+        assert_eq!(0xFE, ppu.read(0x2004));
+
+        ppu.write(0x2003, 0x02);
+        assert_eq!(0xFD & 0xE3, ppu.read(0x2004));
+
+        ppu.write(0x2003, 0x03);
+        assert_eq!(0xFC, ppu.read(0x2004));
     }
 }
