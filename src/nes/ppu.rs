@@ -1,4 +1,3 @@
-use self::{MasterSlaveSelect::*, SpriteSize::*, VRamAddrIncr::*};
 use crate::{bits::BitOps, memory::MutAccess, pin::Pin, rom::Mirroring};
 use log::*;
 use std::mem;
@@ -665,10 +664,7 @@ impl Ppu {
     }
 
     fn inc_vram_addr(&mut self) {
-        let by = match self.control.vram_addr_incr() {
-            VRamAddrIncr::Add1GoingAcross => 1,
-            VRamAddrIncr::Add32GoingDown => 32,
-        };
+        let by = self.control.vram_addr_incr();
         self.vram_addr.increment(by);
     }
 
@@ -881,47 +877,31 @@ impl VRamAddr {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-struct Tile {
-    lo: u8,
-    hi: u8,
-    palette_offset: u16,
-    addr: u16,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Sprite {
-    /// Byte 0.
-    y_pos: u8,
-
-    /// Byte 4.
-    x_pos: u8,
-
-    /// Byte 1.
-    ///
-    /// 76543210
-    /// ||||||||
-    /// |||||||+- Bank ($0000 or $1000) of tiles
-    /// +++++++-- Tile number of top of sprite (0 to 254; bottom half gets the next tile)
-    tile_idx: u8,
-
-    /// Byte 3.
-    ///
-    /// 76543210
-    /// ||||||||
-    /// ||||||++- Palette (4 to 7) of sprite
-    /// |||+++--- Unimplemented
-    /// ||+------ Priority (0: in front of background; 1: behind background)
-    /// |+------- Flip sprite horizontally
-    /// +-------- Flip sprite vertically
-    attributes: u8,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
 struct Status(u8);
 
 impl Status {
     pub fn as_u8(self) -> u8 {
         self.0
+    }
+
+    #[allow(dead_code)]
+    pub fn set_sprite_overflow(&mut self) {
+        self.0.set_bit(5);
+    }
+
+    #[allow(dead_code)]
+    pub fn clear_sprite_overflow(&mut self) {
+        self.0.clear_bit(5);
+    }
+
+    #[allow(dead_code)]
+    pub fn set_sprite_zero_hit(&mut self) {
+        self.0.set_bit(6);
+    }
+
+    #[allow(dead_code)]
+    pub fn clear_sprite_zero_hit(&mut self) {
+        self.0.clear_bit(6);
     }
 
     pub fn is_vblank_set(self) -> bool {
@@ -935,43 +915,25 @@ impl Status {
     pub fn clear_vblank(&mut self) {
         self.0.clear_bit(7)
     }
-
-    pub fn set_sprite_zero_hit(&mut self) {
-        self.0.set_bit(6);
-    }
-
-    pub fn clear_sprite_zero_hit(&mut self) {
-        self.0.clear_bit(6);
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 struct Control(u8);
 
-#[allow(dead_code)]
 impl Control {
     pub fn set(&mut self, v: u8) {
         self.0 = v;
     }
 
-    pub fn base_nametable_addr(self) -> u16 {
-        match self.0 & 3 {
-            0 => 0x2000,
-            1 => 0x2400,
-            2 => 0x2800,
-            3 => 0x2C00,
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn vram_addr_incr(self) -> VRamAddrIncr {
+    pub fn vram_addr_incr(self) -> u16 {
         if self.0.is_bit_set(2) {
-            Add32GoingDown
+            32
         } else {
-            Add1GoingAcross
+            1
         }
     }
 
+    #[allow(dead_code)]
     pub fn sprite_pattern_table_addr(self) -> u16 {
         if self.0.is_bit_set(3) {
             0x1000
@@ -988,19 +950,12 @@ impl Control {
         }
     }
 
-    pub fn sprite_size(self) -> SpriteSize {
+    #[allow(dead_code)]
+    pub fn sprite_height(self) -> u16 {
         if self.0.is_bit_set(5) {
-            EightBySixteen
+            16
         } else {
-            EightByEight
-        }
-    }
-
-    pub fn master_slave_select(self) -> MasterSlaveSelect {
-        if self.0.is_bit_set(6) {
-            OutputColorOnExt
-        } else {
-            ReadBackdropFromExt
+            8
         }
     }
 
@@ -1009,16 +964,15 @@ impl Control {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Default)]
 struct Mask(u8);
 
-#[allow(dead_code)]
 impl Mask {
     pub fn set(&mut self, v: u8) {
         self.0 = v;
     }
 
+    #[allow(dead_code)]
     pub fn grayscale(self) -> bool {
         self.0.is_bit_set(0)
     }
@@ -1027,6 +981,7 @@ impl Mask {
         self.0.is_bit_set(1)
     }
 
+    #[allow(dead_code)]
     pub fn show_sprites_in_contour(self) -> bool {
         self.0.is_bit_set(2)
     }
@@ -1039,35 +994,20 @@ impl Mask {
         self.0.is_bit_set(4)
     }
 
+    #[allow(dead_code)]
     pub fn emphasize_red(self) -> bool {
         self.0.is_bit_set(5)
     }
 
+    #[allow(dead_code)]
     pub fn emphasize_green(self) -> bool {
         self.0.is_bit_set(6)
     }
 
+    #[allow(dead_code)]
     pub fn emphasize_blue(self) -> bool {
         self.0.is_bit_set(7)
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum VRamAddrIncr {
-    Add1GoingAcross,
-    Add32GoingDown,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum SpriteSize {
-    EightByEight,
-    EightBySixteen,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum MasterSlaveSelect {
-    ReadBackdropFromExt,
-    OutputColorOnExt,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1113,27 +1053,13 @@ mod tests {
         use super::super::*;
 
         #[test]
-        fn name_table_addr() {
-            let mut control = Control::default();
-
-            control.set(0b00000000);
-            assert_eq!(0x2000, control.base_nametable_addr());
-            control.set(0b00000001);
-            assert_eq!(0x2400, control.base_nametable_addr());
-            control.set(0b00000010);
-            assert_eq!(0x2800, control.base_nametable_addr());
-            control.set(0b00000011);
-            assert_eq!(0x2C00, control.base_nametable_addr());
-        }
-
-        #[test]
         fn vram_addr_incr() {
             let mut control = Control::default();
 
             control.set(0b00000000);
-            assert_eq!(Add1GoingAcross, control.vram_addr_incr());
+            assert_eq!(1, control.vram_addr_incr());
             control.set(0b00000100);
-            assert_eq!(Add32GoingDown, control.vram_addr_incr());
+            assert_eq!(32, control.vram_addr_incr());
         }
 
         #[test]
@@ -1155,21 +1081,12 @@ mod tests {
         }
 
         #[test]
-        fn sprite_size() {
+        fn sprite_height() {
             let mut control = Control::default();
             control.set(0b00000000);
-            assert_eq!(EightByEight, control.sprite_size());
+            assert_eq!(8, control.sprite_height());
             control.set(0b00100000);
-            assert_eq!(EightBySixteen, control.sprite_size());
-        }
-
-        #[test]
-        fn master_slave_select() {
-            let mut control = Control::default();
-            control.set(0b00000000);
-            assert_eq!(ReadBackdropFromExt, control.master_slave_select());
-            control.set(0b01000000);
-            assert_eq!(OutputColorOnExt, control.master_slave_select());
+            assert_eq!(16, control.sprite_height());
         }
 
         #[test]
@@ -1437,13 +1354,13 @@ mod tests {
         let (mut ppu, _) = build_ppu();
 
         assert_eq!(0, ppu.vram_addr.get());
-        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+        assert_eq!(1, ppu.control.vram_addr_incr());
 
         ppu.write(0x2007, 0xFF);
         assert_eq!(1, ppu.vram_addr.get());
 
         ppu.write(0x2000, 0b0000_0100);
-        assert_eq!(VRamAddrIncr::Add32GoingDown, ppu.control.vram_addr_incr());
+        assert_eq!(32, ppu.control.vram_addr_incr());
 
         ppu.write(0x2007, 0xFF);
         assert_eq!(33, ppu.vram_addr.get());
@@ -1454,13 +1371,13 @@ mod tests {
         let (mut ppu, mut mapper) = build_ppu();
 
         assert_eq!(0, ppu.vram_addr.get());
-        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+        assert_eq!(1, ppu.control.vram_addr_incr());
 
         ppu.mut_read(0x2007, &mut mapper);
         assert_eq!(1, ppu.vram_addr.get());
 
         ppu.write(0x2000, 0b0000_0100);
-        assert_eq!(VRamAddrIncr::Add32GoingDown, ppu.control.vram_addr_incr());
+        assert_eq!(32, ppu.control.vram_addr_incr());
 
         ppu.mut_read(0x2007, &mut mapper);
         assert_eq!(33, ppu.vram_addr.get());
@@ -1471,7 +1388,7 @@ mod tests {
         // TODO: also test pattern tables address space.
         let (mut ppu, mut mapper) = build_ppu();
 
-        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+        assert_eq!(1, ppu.control.vram_addr_incr());
         ppu.vram_addr.set(0x2000);
         ppu.write(0x2007, 0xFF);
         ppu.write(0x2007, 0xA0);
@@ -1486,7 +1403,7 @@ mod tests {
     fn read_immediately_from_data_in_palettes_address_range() {
         let (mut ppu, mut mapper) = build_ppu();
 
-        assert_eq!(VRamAddrIncr::Add1GoingAcross, ppu.control.vram_addr_incr());
+        assert_eq!(1, ppu.control.vram_addr_incr());
         ppu.vram_addr.set(0x3F00);
         ppu.write(0x2007, 0xFF);
         ppu.write(0x2007, 0xA0);
