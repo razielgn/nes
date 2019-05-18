@@ -66,6 +66,9 @@ impl Nes {
         info!("Mapper ID: {:03}", rom.mapper_id);
         info!("Mirroring: {:?}", rom.mirroring);
 
+        info!("PRG ROM: {} x 16 KiB", rom.prg_banks);
+        info!("CHR ROM: {} x  8 KiB", rom.chr_banks);
+
         let mapper = Mapper::new(rom);
         let pc = mapper.read_word(0xFFFC);
         let nmi_pin = Pin::default();
