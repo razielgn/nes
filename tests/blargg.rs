@@ -812,6 +812,36 @@ mod ppu_sprite_hit {
     }
 }
 
+mod cpu_exec_space {
+    /// This program verifies that the CPU can execute code from any
+    /// possible location that it can address, including I/O space.
+    ///
+    /// In addition, it will be tested that an RTS instruction does a
+    /// dummy read of the byte that immediately follows the instructions.
+    ///
+    /// JSR test OK
+    /// JMP test OK
+    /// RTS test OK
+    /// JMP+RTI test OK
+    /// BRK test OK
+    #[test]
+    fn ppuio() {
+        run!("roms/cpu_exec_space/ppuio.nes");
+    }
+
+    /// This program verifies that the CPU can execute code from any
+    /// possible location that it can address, including I/O space.
+    ///
+    /// In this test, it is also verified that not only all write-only
+    /// APU I/O ports return the open bus, but also the unallocated I/O
+    /// space in $4018..$40FF.
+    #[test]
+    #[ignore]
+    fn apu() {
+        run!("roms/cpu_exec_space/apu.nes");
+    }
+}
+
 const RESET_DELAY: Cycles = 410_000;
 
 fn run_test_rom(buf: &[u8]) {
