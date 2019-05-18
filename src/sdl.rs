@@ -280,6 +280,12 @@ fn handle_input(nes: &mut Nes, event_pump: &mut EventPump) -> bool {
             } => {
                 nes.controller_unset(Button::B);
             }
+            Event::KeyDown {
+                keycode: Some(Keycode::R),
+                ..
+            } => {
+                nes.reset();
+            }
             _ => {}
         }
     }
