@@ -384,7 +384,6 @@ mod cpu_reset {
     /// At power, A,X,Y=0 P=$34 S=$FD
     /// At reset, I flag set, S decreased by 3, no other change
     #[test]
-    #[ignore]
     fn registers() {
         run!("roms/cpu_reset/registers.nes");
     }
@@ -813,7 +812,7 @@ mod ppu_sprite_hit {
     }
 }
 
-const RESET_DELAY: Cycles = 310_000;
+const RESET_DELAY: Cycles = 410_000;
 
 fn run_test_rom(buf: &[u8]) {
     let mut nes = Nes::from_buf(buf);
