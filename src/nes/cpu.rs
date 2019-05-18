@@ -904,9 +904,9 @@ impl Into<u8> for P {
 
 #[cfg(test)]
 mod test {
-    use super::Status::*;
-    use super::{Cpu, P};
+    use super::*;
     use crate::instruction::AddressingMode::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn bit_ops_on_p() {

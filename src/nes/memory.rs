@@ -147,6 +147,7 @@ impl<'a> Access for Memory<'a> {
 #[cfg(test)]
 mod test {
     use super::Ram;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn ram_wraparound() {
