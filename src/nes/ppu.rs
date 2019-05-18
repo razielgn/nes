@@ -136,6 +136,12 @@ pub struct Ppu {
     high_tile_byte: u8,
     tile_data: u64,
 
+    sprite_count: usize,
+    sprite_patterns: [u32; 8],
+    sprite_positions: [u8; 8],
+    sprite_priorities: [u8; 8],
+    sprite_indexes: [u8; 8],
+
     current_screen: [u8; 256 * 240],
     prev_screen: [u8; 256 * 240],
 
@@ -170,6 +176,11 @@ impl Ppu {
             current_screen: [0; 256 * 240],
             prev_screen: [0; 256 * 240],
             mirroring: Mirroring::Vertical,
+            sprite_count: 0,
+            sprite_patterns: [0; 8],
+            sprite_positions: [0; 8],
+            sprite_priorities: [0; 8],
+            sprite_indexes: [0; 8],
         }
     }
 
@@ -257,6 +268,8 @@ impl Ppu {
             (PRE_RENDER_SCANLINE, 1) => {
                 trace!("vblank ends");
                 self.status.clear_vblank();
+                self.status.clear_sprite_overflow();
+                self.status.clear_sprite_zero_hit();
             }
             _ => (),
         }
@@ -281,6 +294,8 @@ impl Ppu {
 
                         257 => {
                             self.vram_addr.copy_x(self.temp_vram_addr);
+
+                            self.evaluate_sprites(mapper);
                         }
 
                         // First two tiles on next scanline.
@@ -398,6 +413,103 @@ impl Ppu {
         }
     }
 
+    fn evaluate_sprites<M: MutAccess>(&mut self, mapper: &mut M) {
+        self.sprite_count = 0;
+
+        let height = self.control.sprite_height();
+
+        for i in 0..64 {
+            let offset = i * 4;
+            let y = self.oam_data[offset];
+
+            let (row, overflow) = self.scanline.overflowing_sub(u16::from(y));
+
+            if overflow || row >= height {
+                continue;
+            }
+
+            if self.sprite_count < 8 {
+                let tile = self.oam_data[offset + 1];
+                let attributes = self.oam_data[offset + 2];
+                let x = self.oam_data[offset + 3];
+
+                self.sprite_patterns[self.sprite_count] = self
+                    .fetch_sprite_pattern(row, height, tile, attributes, mapper);
+                self.sprite_positions[self.sprite_count] = x;
+                self.sprite_priorities[self.sprite_count] = (attributes >> 5) & 1;
+                self.sprite_indexes[self.sprite_count] = i as u8;
+            }
+
+            self.sprite_count += 1;
+        }
+
+        if self.sprite_count > 8 {
+            self.sprite_count = 8;
+            self.status.set_sprite_overflow();
+        }
+    }
+
+    fn fetch_sprite_pattern<M: MutAccess>(
+        &mut self,
+        mut row: u16,
+        height: u16,
+        mut tile: u8,
+        attributes: u8,
+        mapper: &mut M,
+    ) -> u32 {
+        let addr = if height == 8 {
+            if attributes.is_bit_set(7) {
+                row = 7 - row;
+            }
+
+            self.control
+                .sprite_pattern_table_addr()
+                .wrapping_add(u16::from(tile) << 4)
+                .wrapping_add(row)
+        } else {
+            if attributes.is_bit_set(7) {
+                row = 15 - row;
+            }
+
+            let table: u16 = if tile.is_bit_set(0) { 0x1000 } else { 0x0000 };
+            tile &= 0xFE;
+
+            if row > 7 {
+                tile += 1;
+                row -= 8;
+            }
+
+            table.wrapping_add(u16::from(tile) << 4).wrapping_add(row)
+        };
+
+        let a = (attributes & 3) << 2;
+        let mut low_tile = self.mem_read(addr, mapper);
+        let mut high_tile = self.mem_read(addr.wrapping_add(8), mapper);
+
+        let mut data = 0;
+        for _ in 0..8 {
+            let p1: u8;
+            let p2: u8;
+
+            if attributes & 0x40 == 0x40 {
+                p1 = low_tile & 1;
+                p2 = (high_tile & 1) << 1;
+                low_tile >>= 1;
+                high_tile >>= 1;
+            } else {
+                p1 = (low_tile & 0x80) >> 7;
+                p2 = (high_tile & 0x80) >> 6;
+                low_tile <<= 1;
+                high_tile <<= 1;
+            }
+
+            data <<= 4;
+            data |= u32::from(a | p1 | p2)
+        }
+
+        data
+    }
+
     fn background_pixel(&self) -> u8 {
         if !self.mask.show_background() {
             return 0;
@@ -408,20 +520,79 @@ impl Ppu {
         (data >> shift) as u8 & 0x0F
     }
 
-    fn draw_pixel(&mut self) {
-        let mut bg = self.background_pixel();
-
-        let x = self.cycle.wrapping_sub(1);
-        let y = self.scanline;
-        if x < 8 && !self.mask.show_background_in_contour() {
-            bg = 0;
+    fn sprite_pixel(&self, x: u16) -> (usize, u8) {
+        if !self.mask.show_sprites() {
+            return (0, 0);
         }
 
-        let palette_idx = if bg % 4 == 0 { 0 } else { bg };
-        let buffer_idx = (y * 256) + x;
+        for i in 0..self.sprite_count {
+            let (offset, overflowed) =
+                x.overflowing_sub(u16::from(self.sprite_positions[i]));
+            if overflowed || offset > 7 {
+                continue;
+            }
 
-        self.current_screen[buffer_idx as usize] =
-            self.palette_ram[palette_idx as usize];
+            let offset = 7u16.wrapping_sub(offset);
+            let color =
+                ((self.sprite_patterns[i] >> (offset << 2) as u8) & 0x0F) as u8;
+            if color % 4 == 0 {
+                continue;
+            }
+
+            return (i, color);
+        }
+
+        (0, 0)
+    }
+
+    fn draw_pixel(&mut self) {
+        let x = self.cycle.wrapping_sub(1);
+        let y = self.scanline;
+
+        let mut bg = self.background_pixel();
+        let (idx, mut sprite) = self.sprite_pixel(x);
+
+        if x < 8 {
+            if !self.mask.show_background_in_contour() {
+                bg = 0;
+            }
+
+            if !self.mask.show_sprites_in_contour() {
+                sprite = 0;
+            }
+        }
+
+        let palette_idx = match (bg % 4 == 0, sprite % 4 == 0) {
+            (true, true) => 0,
+            (true, false) => sprite | 0x10,
+            (false, true) => bg,
+            (false, false) => {
+                if self.sprite_indexes[idx] == 0 && x < 255 {
+                    self.status.set_sprite_zero_hit();
+                }
+
+                if self.sprite_priorities[idx] == 0 {
+                    sprite | 0x10
+                } else {
+                    bg
+                }
+            }
+        };
+
+        self.write_to_screen(y, x, self.read_palette(palette_idx as usize));
+    }
+
+    fn write_to_screen(&mut self, y: u16, x: u16, color: u8) {
+        let idx = (y * 256) + x;
+        self.current_screen[idx as usize] = color;
+    }
+
+    fn read_palette(&self, mut idx: usize) -> u8 {
+        if idx >= 16 && idx % 4 == 0 {
+            idx -= 16
+        }
+
+        self.palette_ram[idx]
     }
 
     // $2002
@@ -800,22 +971,18 @@ impl Status {
         self.0
     }
 
-    #[allow(dead_code)]
     pub fn set_sprite_overflow(&mut self) {
         self.0.set_bit(5);
     }
 
-    #[allow(dead_code)]
     pub fn clear_sprite_overflow(&mut self) {
         self.0.clear_bit(5);
     }
 
-    #[allow(dead_code)]
     pub fn set_sprite_zero_hit(&mut self) {
         self.0.set_bit(6);
     }
 
-    #[allow(dead_code)]
     pub fn clear_sprite_zero_hit(&mut self) {
         self.0.clear_bit(6);
     }
