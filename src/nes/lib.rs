@@ -116,10 +116,6 @@ impl Nes {
         }
     }
 
-    pub fn dump_debug(&self) {
-        self.ppu.debug_sprites();
-    }
-
     pub fn controller_set(&mut self, button: Button) {
         trace!("set button: {:?}", button);
         self.controller1.set_button(button);
