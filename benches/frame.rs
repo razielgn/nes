@@ -4,7 +4,7 @@ use nes::Nes;
 fn criterion_benchmark(c: &mut Criterion) {
     let rom = include_bytes!("../tests/roms/nestest.nes");
 
-    c.bench_function("ppu tile rendering", move |b| {
+    c.bench_function("frame", move |b| {
         b.iter(|| {
             let mut nes = Nes::from_buf(rom);
 
