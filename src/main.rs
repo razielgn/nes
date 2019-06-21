@@ -75,6 +75,6 @@ fn init_logger(level: &str) {
         _ => LevelFilter::Off,
     };
 
-    TermLogger::init(level_filter, Config::default())
+    TermLogger::init(level_filter, Config::default(), TerminalMode::Stderr)
         .expect("failed to init terminal logger");
 }
