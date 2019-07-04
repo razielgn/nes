@@ -1,5 +1,5 @@
 use crate::bits::BitOps;
-use nom::*;
+use nom::{do_parse, named, number::complete::le_u8, tag, take};
 use std::{fs, path::Path};
 
 const PRG_SIZE: usize = 0x4000;
