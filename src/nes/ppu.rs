@@ -276,10 +276,10 @@ impl Ppu {
 
         if self.is_rendering_enabled() {
             match self.scanline {
-                0...239 => {
+                0..=239 => {
                     match self.cycle {
                         // Data for each tile is fetched.
-                        1...256 => {
+                        1..=256 => {
                             self.draw_pixel();
                             self.load_tiles(mapper);
 
@@ -299,7 +299,7 @@ impl Ppu {
                         }
 
                         // First two tiles on next scanline.
-                        321...336 => {
+                        321..=336 => {
                             self.load_tiles(mapper);
 
                             if self.cycle % 8 == 0 {
@@ -318,7 +318,7 @@ impl Ppu {
                     // TODO: sprite evaluation.
                 }
                 PRE_RENDER_SCANLINE => match self.cycle {
-                    1...256 => {
+                    1..=256 => {
                         self.load_tiles(mapper);
 
                         if self.cycle % 8 == 0 {
@@ -332,10 +332,10 @@ impl Ppu {
                     257 => {
                         self.vram_addr.copy_x(self.temp_vram_addr);
                     }
-                    280...304 => {
+                    280..=304 => {
                         self.vram_addr.copy_y(self.temp_vram_addr);
                     }
-                    321...336 => {
+                    321..=336 => {
                         self.load_tiles(mapper);
 
                         if self.cycle % 8 == 0 {
@@ -604,7 +604,7 @@ impl Ppu {
         self.status.clear_vblank();
 
         // tweaking affects test `ppu_vbl_nmi::suppression`.
-        if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+        if let (VBLANK_START_SCANLINE, 2..=4) = (self.scanline, self.cycle) {
             self.nmi_pin.clear();
 
             // tweaking affects test `ppu_vbl_nmi::vbl_{set,clear}_time`.
@@ -647,7 +647,7 @@ impl Ppu {
             }
         } else {
             // tweaking affects test `ppu_vbl_nmi::nmi_off_timing`.
-            if let (VBLANK_START_SCANLINE, 2...4) = (self.scanline, self.cycle) {
+            if let (VBLANK_START_SCANLINE, 2..=4) = (self.scanline, self.cycle) {
                 self.nmi_pin.clear();
             }
         }
@@ -699,7 +699,7 @@ impl Ppu {
     // $2004
     fn write_to_oam(&mut self, mut val: u8) {
         match self.scanline {
-            0...239 | PRE_RENDER_SCANLINE if self.is_rendering_enabled() => {
+            0..=239 | PRE_RENDER_SCANLINE if self.is_rendering_enabled() => {
                 // TODO(low): glitchy OAM increment by bumping only the high 6 bits of OAMADDR.
             }
             _ => {
@@ -730,10 +730,10 @@ impl Ppu {
     fn mem_read<M: MutAccess>(&self, addr: u16, mapper: &mut M) -> u8 {
         match addr {
             // Pattern Tables
-            0x0000...0x1FFF => mapper.mut_read(addr),
+            0x0000..=0x1FFF => mapper.mut_read(addr),
 
             // Nametables
-            0x2000...0x3EFF => self.vram[self.resolve_address(addr)],
+            0x2000..=0x3EFF => self.vram[self.resolve_address(addr)],
 
             // Mirrored palette RAM indexes
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
@@ -741,17 +741,17 @@ impl Ppu {
             }
 
             // Palette RAM indexes
-            0x3F00...0x3F0F
-            | 0x3F11...0x3F13
-            | 0x3F15...0x3F17
-            | 0x3F19...0x3F1B
-            | 0x3F1D...0x3F1F => {
+            0x3F00..=0x3F0F
+            | 0x3F11..=0x3F13
+            | 0x3F15..=0x3F17
+            | 0x3F19..=0x3F1B
+            | 0x3F1D..=0x3F1F => {
                 self.palette_ram[(addr - 0x3F00) as usize]
                     | (self.open_bus.as_u8() & 0b1100_0000)
             }
 
-            // Mirror of 0x3F00...0x3F1F
-            0x3F20...0x3FFF => self.mem_read(0x3F00 + (addr % 0x20), mapper),
+            // Mirror of 0x3F00..=0x3F1F
+            0x3F20..=0x3FFF => self.mem_read(0x3F00 + (addr % 0x20), mapper),
 
             _ => unimplemented!("reading from 0x4000"),
         }
@@ -806,14 +806,14 @@ impl Ppu {
 
     fn mem_write(&mut self, addr: u16, val: u8) {
         match addr {
-            // Pattern Table 0
-            0x0000...0x0FFF => (),
+            // Patter= Table 0
+            0x0000..=0x0FFF => (),
 
             // Pattern Table 1
-            0x1000...0x1FFF => (),
+            0x1000..=0x1FFF => (),
 
             // Nametables
-            0x2000...0x3EFF => self.vram[self.resolve_address(addr)] = val,
+            0x2000..=0x3EFF => self.vram[self.resolve_address(addr)] = val,
 
             // Mirrored palette RAM indexes
             0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
@@ -821,16 +821,16 @@ impl Ppu {
             }
 
             // Palette RAM indexes
-            0x3F00...0x3F0F
-            | 0x3F11...0x3F13
-            | 0x3F15...0x3F17
-            | 0x3F19...0x3F1B
-            | 0x3F1D...0x3F1F => {
+            0x3F00..=0x3F0F
+            | 0x3F11..=0x3F13
+            | 0x3F15..=0x3F17
+            | 0x3F19..=0x3F1B
+            | 0x3F1D..=0x3F1F => {
                 self.palette_ram[(addr - 0x3F00) as usize] = val;
             }
 
-            // Mirror of 0x3F00...0x3F1F
-            0x3F20...0x3FFF => {
+            // Mirror of 0x3F00..=0x3F1F
+            0x3F20..=0x3FFF => {
                 self.mem_write(0x3F00 + (addr % 0x20), val);
             }
             _ => (),

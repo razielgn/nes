@@ -29,19 +29,19 @@ impl Access for Mapper {
         let addr = addr as usize;
 
         match addr {
-            0x0000...0x1FFF => {
+            0x0000..=0x1FFF => {
                 if let Some(val) = self.rom.chr.get(addr) {
                     *val
                 } else {
                     panic!("out of bound CHR read at ${:04x}", addr);
                 }
             }
-            0x6000...0x7FFF => self.rom.sram[addr - 0x6000],
-            0x8000...0xBFFF => {
+            0x6000..=0x7FFF => self.rom.sram[addr - 0x6000],
+            0x8000..=0xBFFF => {
                 let idx = self.bank1 * 0x4000 + (addr - 0x8000);
                 self.rom.prg[idx]
             }
-            0xC000...0xFFFF => {
+            0xC000..=0xFFFF => {
                 let idx = self.bank2 * 0x4000 + (addr - 0xC000);
                 self.rom.prg[idx]
             }
@@ -59,11 +59,11 @@ impl MutAccess for Mapper {
         let addr = addr as usize;
 
         match addr {
-            0x4020...0x5FFF => {
+            0x4020..=0x5FFF => {
                 panic!("illegal write at {:04X} of {:02X}", addr, addr);
             }
-            0x6000...0x7FFF => self.rom.sram[addr - 0x6000] = val,
-            0x8000...0xFFFF => self.bank1 = val as usize % self.banks,
+            0x6000..=0x7FFF => self.rom.sram[addr - 0x6000] = val,
+            0x8000..=0xFFFF => self.bank1 = val as usize % self.banks,
             _ => unreachable!(),
         }
     }

@@ -19,14 +19,14 @@ test = false
 [dependencies]
 nom = "5.0"
 log = { version = "0.4", features = ["release_max_level_info"] }
-simplelog = "0.6"
+simplelog = "0.7"
 sdl2 = "0.32.2"
 clap = "2.33"
 
 [dev-dependencies]
 pretty_assertions = "0.6"
 colored = "1.7"
-criterion = "0.2"
+criterion = "0.3"
 
 [profile.dev]
 opt-level = 1

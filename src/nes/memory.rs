@@ -90,14 +90,14 @@ impl<'a> MutMemory<'a> {
 impl<'a> MutAccess for MutMemory<'a> {
     fn mut_read(&mut self, addr: u16) -> u8 {
         let read = match addr {
-            0x0000...0x1FFF => self.ram.read(addr),
-            0x2000...0x3FFF => self.ppu.mut_read(addr, self.mapper),
-            0x4000...0x4014 => 0xFF, // TODO read from I/O registers
+            0x0000..=0x1FFF => self.ram.read(addr),
+            0x2000..=0x3FFF => self.ppu.mut_read(addr, self.mapper),
+            0x4000..=0x4014 => 0xFF, // TODO read from I/O registers
             0x4015 => 0,             // TODO: APU.
             0x4016 => self.controller1.read(),
             0x4017 => self.controller1.read(),
-            0x4018...0x5FFF => 0, // TODO: I/O registers.
-            0x6000...0xFFFF => self.mapper.mut_read(addr),
+            0x4018..=0x5FFF => 0, // TODO: I/O registers.
+            0x6000..=0xFFFF => self.mapper.mut_read(addr),
         };
 
         debug!("read {:04x} => {:02x}", addr, read);
@@ -107,9 +107,9 @@ impl<'a> MutAccess for MutMemory<'a> {
 
     fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000...0x1FFF => self.ram.write(addr, val),
-            0x2000...0x3FFF => self.ppu.write(addr, val),
-            0x4000...0x4013 => (),
+            0x0000..=0x1FFF => self.ram.write(addr, val),
+            0x2000..=0x3FFF => self.ppu.write(addr, val),
+            0x4000..=0x4013 => (),
             0x4014 => self.dma_transfer(val),
             0x4015 => (), // TODO: APU.
             0x4016 => {
@@ -117,8 +117,8 @@ impl<'a> MutAccess for MutMemory<'a> {
                 self.controller2.write(val);
             }
             0x4017 => (),          // TODO: APU.
-            0x4018...0x401F => (), // TODO write to I/O registers
-            0x4020...0xFFFF => self.mapper.write(addr, val),
+            0x4018..=0x401F => (), // TODO write to I/O registers
+            0x4020..=0xFFFF => self.mapper.write(addr, val),
         }
     }
 }
@@ -132,10 +132,10 @@ pub struct Memory<'a> {
 impl<'a> Access for Memory<'a> {
     fn read(&self, addr: u16) -> u8 {
         let read = match addr {
-            0x0000...0x1FFF => self.ram.read(addr),
-            0x2000...0x3FFF => self.ppu.read(addr),
-            0x4000...0x401F => 0xFF, // TODO read from I/O registers
-            0x4020...0xFFFF => self.mapper.read(addr),
+            0x0000..=0x1FFF => self.ram.read(addr),
+            0x2000..=0x3FFF => self.ppu.read(addr),
+            0x4000..=0x401F => 0xFF, // TODO read from I/O registers
+            0x4020..=0xFFFF => self.mapper.read(addr),
         };
 
         debug!("read {:04x} => {:02x}", addr, read);
