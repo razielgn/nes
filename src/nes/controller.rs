@@ -28,7 +28,7 @@ impl Controller {
         self.buttons[button as usize] = false;
     }
 
-    pub fn read(&mut self) -> u8 {
+    pub fn mut_read(&mut self) -> u8 {
         let val = if self.idx < 8 && self.buttons[self.idx] {
             1
         } else {

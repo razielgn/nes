@@ -1,6 +1,9 @@
-use crate::{bits::BitOps, memory::MutAccess, pin::Pin, rom::Mirroring};
+use crate::{
+    bits::BitOps, mapper::Mapper, memory::MutAccess, pin::Pin, rom::Mirroring,
+    Renderer,
+};
 use log::*;
-use std::mem;
+use std::{cell::RefCell, mem, rc::Rc};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Frame {
@@ -40,7 +43,6 @@ pub static COLORS: [u32; 64] = [
     0x000000,
 ];
 
-#[derive(Clone)]
 pub struct Ppu {
     scanline: u16,
     cycle: u16,
@@ -128,7 +130,6 @@ pub struct Ppu {
     open_bus: OpenBus,
 
     write_toggle: bool,
-    nmi_pin: Pin,
 
     nametable_byte: u8,
     attribute_table_byte: u8,
@@ -142,14 +143,21 @@ pub struct Ppu {
     sprite_priorities: [u8; 8],
     sprite_indexes: [u8; 8],
 
-    current_screen: [u8; 256 * 240],
-    prev_screen: [u8; 256 * 240],
+    screen: [u8; 256 * 240],
 
     mirroring: Mirroring,
+
+    nmi_pin: Pin,
+    mapper: Rc<RefCell<Mapper>>, // TODO: extract mapper & vram.
+    renderer: Rc<RefCell<dyn Renderer>>,
 }
 
 impl Ppu {
-    pub fn new(nmi_pin: Pin) -> Self {
+    pub fn new(
+        nmi_pin: Pin,
+        mapper: Rc<RefCell<Mapper>>,
+        renderer: Rc<RefCell<dyn Renderer>>,
+    ) -> Self {
         Self {
             status: Status::default(),
             control: Control::default(),
@@ -168,13 +176,14 @@ impl Ppu {
             open_bus: OpenBus::default(),
             write_toggle: false,
             nmi_pin,
+            mapper,
+            renderer,
             nametable_byte: 0,
             attribute_table_byte: 0,
             low_tile_byte: 0,
             high_tile_byte: 0,
             tile_data: 0,
-            current_screen: [0; 256 * 240],
-            prev_screen: [0; 256 * 240],
+            screen: [0; 256 * 240],
             mirroring: Mirroring::Vertical,
             sprite_count: 0,
             sprite_patterns: [0; 8],
@@ -188,7 +197,7 @@ impl Ppu {
         self.mirroring = mirroring;
     }
 
-    pub fn mut_read<M: MutAccess>(&mut self, addr: u16, mapper: &mut M) -> u8 {
+    pub fn mut_read(&mut self, addr: u16) -> u8 {
         let val = match 0x2000 + (addr % 8) {
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus.as_u8(),
             0x2002 => self.status(),
@@ -198,7 +207,7 @@ impl Ppu {
             }
             0x2007 => {
                 self.open_bus.refresh();
-                self.mut_read_from_data(mapper)
+                self.mut_read_from_data()
             }
             _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
         };
@@ -236,14 +245,20 @@ impl Ppu {
     }
 
     pub fn screen(&self) -> &[u8] {
-        &self.prev_screen
+        &self.screen
     }
 
     pub fn palette(&self) -> &[u8] {
         &self.palette_ram
     }
 
-    pub fn step<M: MutAccess>(&mut self, mapper: &mut M) {
+    pub fn cpu_cycle(&mut self) {
+        for _ in 0..3 {
+            self.step();
+        }
+    }
+
+    pub fn step(&mut self) {
         trace!(
             "step cycle {:3}, scanline {:3}, frame {:4?}",
             self.cycle,
@@ -257,7 +272,8 @@ impl Ppu {
             (VBLANK_START_SCANLINE, 1) => {
                 trace!("vblank starts");
 
-                mem::swap(&mut self.current_screen, &mut self.prev_screen);
+                self.renderer.borrow_mut().update(&self.screen);
+
                 self.status.set_vblank();
 
                 if self.control.nmi_at_next_vblank() {
@@ -281,7 +297,7 @@ impl Ppu {
                         // Data for each tile is fetched.
                         1...256 => {
                             self.draw_pixel();
-                            self.load_tiles(mapper);
+                            self.load_tiles();
 
                             if self.cycle % 8 == 0 {
                                 self.vram_addr.increment_x();
@@ -295,12 +311,12 @@ impl Ppu {
                         257 => {
                             self.vram_addr.copy_x(self.temp_vram_addr);
 
-                            self.evaluate_sprites(mapper);
+                            self.evaluate_sprites();
                         }
 
                         // First two tiles on next scanline.
                         321...336 => {
-                            self.load_tiles(mapper);
+                            self.load_tiles();
 
                             if self.cycle % 8 == 0 {
                                 self.vram_addr.increment_x();
@@ -310,7 +326,7 @@ impl Ppu {
                         // Unused nametable fetches.
                         337 | 339 => {
                             let addr = self.vram_addr.nametable_addr();
-                            let _ = self.mem_read(addr, mapper);
+                            let _ = self.mem_read(addr);
                         }
                         _ => {}
                     }
@@ -319,7 +335,7 @@ impl Ppu {
                 }
                 PRE_RENDER_SCANLINE => match self.cycle {
                     1...256 => {
-                        self.load_tiles(mapper);
+                        self.load_tiles();
 
                         if self.cycle % 8 == 0 {
                             self.vram_addr.increment_x();
@@ -336,7 +352,7 @@ impl Ppu {
                         self.vram_addr.copy_y(self.temp_vram_addr);
                     }
                     321...336 => {
-                        self.load_tiles(mapper);
+                        self.load_tiles();
 
                         if self.cycle % 8 == 0 {
                             self.vram_addr.increment_x();
@@ -375,7 +391,7 @@ impl Ppu {
         }
     }
 
-    fn load_tiles<M: MutAccess>(&mut self, mapper: &mut M) {
+    fn load_tiles(&mut self) {
         self.tile_data <<= 4;
 
         match self.cycle % 8 {
@@ -394,26 +410,25 @@ impl Ppu {
             }
             1 => {
                 let addr = self.vram_addr.nametable_addr();
-                self.nametable_byte = self.mem_read(addr, mapper);
+                self.nametable_byte = self.mem_read(addr);
             }
             3 => {
                 let addr = self.vram_addr.attribute_addr();
                 let shift = self.vram_addr.shift();
                 self.attribute_table_byte =
-                    ((self.mem_read(addr, mapper) >> shift) & 3) << 2;
+                    ((self.mem_read(addr) >> shift) & 3) << 2;
             }
             5 => {
-                self.low_tile_byte = self.mem_read(self.low_tile_addr(), mapper);
+                self.low_tile_byte = self.mem_read(self.low_tile_addr());
             }
             7 => {
-                self.high_tile_byte =
-                    self.mem_read(self.high_tile_addr(), mapper);
+                self.high_tile_byte = self.mem_read(self.high_tile_addr());
             }
             _ => {}
         }
     }
 
-    fn evaluate_sprites<M: MutAccess>(&mut self, mapper: &mut M) {
+    fn evaluate_sprites(&mut self) {
         self.sprite_count = 0;
 
         let height = self.control.sprite_height();
@@ -433,8 +448,8 @@ impl Ppu {
                 let attributes = self.oam_data[offset + 2];
                 let x = self.oam_data[offset + 3];
 
-                self.sprite_patterns[self.sprite_count] = self
-                    .fetch_sprite_pattern(row, height, tile, attributes, mapper);
+                self.sprite_patterns[self.sprite_count] =
+                    self.fetch_sprite_pattern(row, height, tile, attributes);
                 self.sprite_positions[self.sprite_count] = x;
                 self.sprite_priorities[self.sprite_count] = (attributes >> 5) & 1;
                 self.sprite_indexes[self.sprite_count] = i as u8;
@@ -449,13 +464,12 @@ impl Ppu {
         }
     }
 
-    fn fetch_sprite_pattern<M: MutAccess>(
+    fn fetch_sprite_pattern(
         &mut self,
         mut row: u16,
         height: u16,
         mut tile: u8,
         attributes: u8,
-        mapper: &mut M,
     ) -> u32 {
         let addr = if height == 8 {
             if attributes.is_bit_set(7) {
@@ -483,8 +497,8 @@ impl Ppu {
         };
 
         let a = (attributes & 3) << 2;
-        let mut low_tile = self.mem_read(addr, mapper);
-        let mut high_tile = self.mem_read(addr.wrapping_add(8), mapper);
+        let mut low_tile = self.mem_read(addr);
+        let mut high_tile = self.mem_read(addr.wrapping_add(8));
 
         let mut data = 0;
         for _ in 0..8 {
@@ -584,7 +598,7 @@ impl Ppu {
 
     fn write_to_screen(&mut self, y: u16, x: u16, color: u8) {
         let idx = (y * 256) + x;
-        self.current_screen[idx as usize] = color;
+        self.screen[idx as usize] = color;
     }
 
     fn read_palette(&self, mut idx: usize) -> u8 {
@@ -714,11 +728,11 @@ impl Ppu {
     }
 
     // $2007
-    fn mut_read_from_data<M: MutAccess>(&mut self, mapper: &mut M) -> u8 {
+    fn mut_read_from_data(&mut self) -> u8 {
         let addr = self.vram_addr.get();
         self.inc_vram_addr();
 
-        let mut val = self.mem_read(addr, mapper);
+        let mut val = self.mem_read(addr);
 
         if addr <= 0x3EFF {
             mem::swap(&mut self.temp_vram_read_buffer, &mut val);
@@ -727,18 +741,16 @@ impl Ppu {
         val
     }
 
-    fn mem_read<M: MutAccess>(&self, addr: u16, mapper: &mut M) -> u8 {
+    fn mem_read(&self, addr: u16) -> u8 {
         match addr {
             // Pattern Tables
-            0x0000...0x1FFF => mapper.mut_read(addr),
+            0x0000...0x1FFF => self.mapper.borrow_mut().mut_read(addr),
 
             // Nametables
             0x2000...0x3EFF => self.vram[self.resolve_address(addr)],
 
             // Mirrored palette RAM indexes
-            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
-                self.mem_read(addr - 0x10, mapper)
-            }
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => self.mem_read(addr - 0x10),
 
             // Palette RAM indexes
             0x3F00...0x3F0F
@@ -751,7 +763,7 @@ impl Ppu {
             }
 
             // Mirror of 0x3F00...0x3F1F
-            0x3F20...0x3FFF => self.mem_read(0x3F00 + (addr % 0x20), mapper),
+            0x3F20...0x3FFF => self.mem_read(0x3F00 + (addr % 0x20)),
 
             _ => unimplemented!("reading from 0x4000"),
         }

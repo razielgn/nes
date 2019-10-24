@@ -1,294 +1,470 @@
-use nes::{Button, Nes};
+use nes::{Button, Nes, Renderer, PPU_COLORS};
 use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
-    EventPump,
+    render::{Texture, TextureCreator, WindowCanvas},
+    video::WindowContext,
+    EventPump, Sdl, VideoSubsystem,
 };
+use std::io::{Cursor, Write};
 
-pub fn run(nes: Nes, debug: bool, scale: u32) {
-    if debug {
-        run_debug(nes, scale);
-    } else {
-        run_normal(nes, scale);
+pub struct SdlRenderer {
+    debug: bool,
+    scale: u32,
+    running: bool,
+    ctx: Sdl,
+    event_pump: EventPump,
+    video_subsystem: VideoSubsystem,
+    screen_texture_rect: Rect,
+    canvas: WindowCanvas,
+}
+
+impl SdlRenderer {
+    pub fn new(debug: bool, scale: u32) -> Result<Self, String> {
+        let ctx = sdl2::init()?;
+        let video_subsystem = ctx.video()?;
+
+        let screen_texture_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
+        let window = video_subsystem
+            .window(
+                "NES",
+                screen_texture_rect.width(),
+                screen_texture_rect.height(),
+            )
+            .allow_highdpi()
+            .position_centered()
+            .build()
+            .map_err(|e| format!("{:?}", e))?;
+
+        let canvas = window
+            .into_canvas()
+            .accelerated()
+            .present_vsync()
+            .build()
+            .map_err(|e| format!("{:?}", e))?;
+
+        let event_pump = ctx.event_pump().map_err(|e| format!("{:?}", e))?;
+
+        Ok(Self {
+            debug,
+            scale,
+            running: true,
+            ctx,
+            video_subsystem,
+            screen_texture_rect,
+            canvas,
+            event_pump,
+        })
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+
+    pub fn process_input(&mut self, nes: &mut Nes) {
+        for event in self.event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    self.running = false;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    nes.controller_set(Button::Down);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    nes.controller_unset(Button::Down);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => {
+                    nes.controller_set(Button::Up);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => {
+                    nes.controller_unset(Button::Up);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Right),
+                    ..
+                } => {
+                    nes.controller_set(Button::Right);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Right),
+                    ..
+                } => {
+                    nes.controller_unset(Button::Right);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Left),
+                    ..
+                } => {
+                    nes.controller_set(Button::Left);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Left),
+                    ..
+                } => {
+                    nes.controller_unset(Button::Left);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Return),
+                    ..
+                } => {
+                    nes.controller_set(Button::Start);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Return),
+                    ..
+                } => {
+                    nes.controller_unset(Button::Start);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::RShift),
+                    ..
+                } => {
+                    nes.controller_set(Button::Select);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::RShift),
+                    ..
+                } => {
+                    nes.controller_unset(Button::Select);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::A),
+                    ..
+                } => {
+                    nes.controller_set(Button::A);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::A),
+                    ..
+                } => {
+                    nes.controller_unset(Button::A);
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::S),
+                    ..
+                } => {
+                    nes.controller_set(Button::B);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::S),
+                    ..
+                } => {
+                    nes.controller_unset(Button::B);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => {
+                    nes.reset();
+                }
+                _ => {}
+            }
+        }
     }
 }
 
-fn run_normal(mut nes: Nes, scale: u32) {
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
-
-    let screen_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
-
-    let window = video_subsystem
-        .window("NES", screen_rect.width(), screen_rect.height())
-        .allow_highdpi()
-        .position_centered()
-        .build()
-        .unwrap();
-
-    let mut canvas = window.into_canvas().build().unwrap();
-
-    let texture_creator = canvas.texture_creator();
-    let mut screen = texture_creator
-        .create_texture_streaming(PixelFormatEnum::RGB24, 256, 240)
-        .expect("failed to create screen texture");
-
-    let mut event_pump = sdl_context.event_pump().unwrap();
-
-    loop {
-        if handle_input(&mut nes, &mut event_pump) {
-            break;
+impl Renderer for SdlRenderer {
+    fn update(&mut self, pixels: &[u8]) {
+        for event in self.event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    self.running = false;
+                }
+                _ => {}
+            }
         }
 
-        nes.step_frame();
+        let texture_creator = self.canvas.texture_creator();
+        let mut screen_texture = texture_creator
+            .create_texture_streaming(PixelFormatEnum::RGB24, 256, 240)
+            .unwrap();
 
-        screen
+        screen_texture
             .with_lock(None, |buf, _pitch| {
-                nes.render_screen(buf).unwrap();
+                let mut cur = Cursor::new(buf);
+
+                for i in pixels {
+                    let color = PPU_COLORS[(*i % 64) as usize];
+                    cur.write_all(&color.to_be_bytes()[1..]).unwrap();
+                }
             })
             .expect("failed to update screen texture");
 
-        canvas.clear();
-        canvas.set_draw_color(Color::RGB(30, 30, 30));
+        self.canvas.clear();
+        self.canvas.set_draw_color(Color::RGB(30, 30, 30));
 
-        canvas
-            .copy(&screen, None, screen_rect)
+        self.canvas
+            .copy(&screen_texture, None, self.screen_texture_rect)
             .expect("failed to render screen texture");
 
-        canvas.present();
+        self.canvas.present();
     }
 }
 
-fn run_debug(mut nes: Nes, scale: u32) {
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
+// fn run_normal(mut nes: Nes, scale: u32) {
+//     let sdl_context = sdl2::init().unwrap();
+//     let video_subsystem = sdl_context.video().unwrap();
 
-    let margin = 20 * scale;
+//     let screen_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
 
-    let screen_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
-    let chr_left_rect = Rect::new(
-        screen_rect.top_right().x() + margin as i32,
-        screen_rect.top_right().y(),
-        128 * scale,
-        128 * scale,
-    );
-    let chr_right_rect = Rect::new(
-        chr_left_rect.x(),
-        chr_left_rect.bottom_left().y() + margin as i32,
-        chr_left_rect.width(),
-        chr_left_rect.height(),
-    );
-    let palette_rect = Rect::new(
-        chr_left_rect.top_right().x() + margin as i32,
-        screen_rect.top_right().y(),
-        16 * 4 * scale,
-        16 * 8 * scale,
-    );
+//     let window = video_subsystem
+//         .window("NES", screen_rect.width(), screen_rect.height())
+//         .allow_highdpi()
+//         .position_centered()
+//         .build()
+//         .unwrap();
+// }
 
-    let window = video_subsystem
-        .window(
-            "NES",
-            screen_rect.width()
-                + margin
-                + chr_left_rect.width()
-                + margin
-                + palette_rect.width(),
-            chr_left_rect.height() + margin + chr_right_rect.width(),
-        )
-        .allow_highdpi()
-        .position_centered()
-        .build()
-        .unwrap();
+// fn run_debug(mut nes: Nes, scale: u32) {
+//     let sdl_context = sdl2::init().unwrap();
+//     let video_subsystem = sdl_context.video().unwrap();
 
-    let mut canvas = window.into_canvas().build().unwrap();
+//     let margin = 20 * scale;
 
-    let texture_creator = canvas.texture_creator();
-    let mut chr_left = texture_creator
-        .create_texture_streaming(PixelFormatEnum::RGB24, 128, 128)
-        .expect("failed to create chr left texture");
-    let mut chr_right = texture_creator
-        .create_texture_streaming(PixelFormatEnum::RGB24, 128, 128)
-        .expect("failed to create chr right texture");
-    let mut palette = texture_creator
-        .create_texture_streaming(PixelFormatEnum::RGB24, 4, 8)
-        .expect("failed to create palette texture");
-    let mut screen = texture_creator
-        .create_texture_streaming(PixelFormatEnum::RGB24, 256, 240)
-        .expect("failed to create screen texture");
+//     let screen_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
+//     let chr_left_rect = Rect::new(
+//         screen_rect.top_right().x() + margin as i32,
+//         screen_rect.top_right().y(),
+//         128 * scale,
+//         128 * scale,
+//     );
+//     let chr_right_rect = Rect::new(
+//         chr_left_rect.x(),
+//         chr_left_rect.bottom_left().y() + margin as i32,
+//         chr_left_rect.width(),
+//         chr_left_rect.height(),
+//     );
+//     let palette_rect = Rect::new(
+//         chr_left_rect.top_right().x() + margin as i32,
+//         screen_rect.top_right().y(),
+//         16 * 4 * scale,
+//         16 * 8 * scale,
+//     );
 
-    let mut event_pump = sdl_context.event_pump().unwrap();
+//     let window = video_subsystem
+//         .window(
+//             "NES",
+//             screen_rect.width()
+//                 + margin
+//                 + chr_left_rect.width()
+//                 + margin
+//                 + palette_rect.width(),
+//             chr_left_rect.height() + margin + chr_right_rect.width(),
+//         )
+//         .allow_highdpi()
+//         .position_centered()
+//         .build()
+//         .unwrap();
 
-    loop {
-        if handle_input(&mut nes, &mut event_pump) {
-            break;
-        }
+//     let mut canvas = window.into_canvas().build().unwrap();
 
-        nes.step_frame();
+//     let texture_creator = canvas.texture_creator();
+//     let mut chr_left = texture_creator
+//         .create_texture_streaming(PixelFormatEnum::RGB24, 128, 128)
+//         .expect("failed to create chr left texture");
+//     let mut chr_right = texture_creator
+//         .create_texture_streaming(PixelFormatEnum::RGB24, 128, 128)
+//         .expect("failed to create chr right texture");
+//     let mut palette = texture_creator
+//         .create_texture_streaming(PixelFormatEnum::RGB24, 4, 8)
+//         .expect("failed to create palette texture");
+//     let mut screen = texture_creator
+//         .create_texture_streaming(PixelFormatEnum::RGB24, 256, 240)
+//         .expect("failed to create screen texture");
 
-        chr_left
-            .with_lock(None, |buf, _pitch| {
-                nes.render_chr_left(buf).unwrap();
-            })
-            .expect("failed to update chr left texture");
+//     let mut event_pump = sdl_context.event_pump().unwrap();
 
-        chr_right
-            .with_lock(None, |buf, _pitch| {
-                nes.render_chr_right(buf).unwrap();
-            })
-            .expect("failed to update chr right texture");
+//     loop {
+//         if handle_input(&mut nes, &mut event_pump) {
+//             break;
+//         }
 
-        screen
-            .with_lock(None, |buf, _pitch| {
-                nes.render_screen(buf).unwrap();
-            })
-            .expect("failed to update screen texture");
+//         nes.step_frame();
 
-        palette
-            .with_lock(None, |buf, _pitch| {
-                nes.render_palette(buf).unwrap();
-            })
-            .expect("failed to update palette texture");
+//         chr_left
+//             .with_lock(None, |buf, _pitch| {
+//                 nes.render_chr_left(buf).unwrap();
+//             })
+//             .expect("failed to update chr left texture");
 
-        canvas.clear();
-        canvas.set_draw_color(Color::RGB(30, 30, 30));
+//         chr_right
+//             .with_lock(None, |buf, _pitch| {
+//                 nes.render_chr_right(buf).unwrap();
+//             })
+//             .expect("failed to update chr right texture");
 
-        canvas
-            .copy(&chr_left, None, chr_left_rect)
-            .expect("failed to render chr left texture");
+//         screen
+//             .with_lock(None, |buf, _pitch| {
+//                 nes.render_screen(buf).unwrap();
+//             })
+//             .expect("failed to update screen texture");
 
-        canvas
-            .copy(&chr_right, None, chr_right_rect)
-            .expect("failed to render chr right texture");
+//         palette
+//             .with_lock(None, |buf, _pitch| {
+//                 nes.render_palette(buf).unwrap();
+//             })
+//             .expect("failed to update palette texture");
 
-        canvas
-            .copy(&screen, None, screen_rect)
-            .expect("failed to render screen texture");
+//         canvas.clear();
+//         canvas.set_draw_color(Color::RGB(30, 30, 30));
 
-        canvas
-            .copy(&palette, None, palette_rect)
-            .expect("failed to render chr right texture");
+//         canvas
+//             .copy(&chr_left, None, chr_left_rect)
+//             .expect("failed to render chr left texture");
 
-        canvas.present();
-    }
-}
+//         canvas
+//             .copy(&chr_right, None, chr_right_rect)
+//             .expect("failed to render chr right texture");
 
-fn handle_input(nes: &mut Nes, event_pump: &mut EventPump) -> bool {
-    for event in event_pump.poll_iter() {
-        match event {
-            Event::Quit { .. }
-            | Event::KeyDown {
-                keycode: Some(Keycode::Escape),
-                ..
-            } => {
-                return true;
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Down),
-                ..
-            } => {
-                nes.controller_set(Button::Down);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Down),
-                ..
-            } => {
-                nes.controller_unset(Button::Down);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Up),
-                ..
-            } => {
-                nes.controller_set(Button::Up);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Up),
-                ..
-            } => {
-                nes.controller_unset(Button::Up);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Right),
-                ..
-            } => {
-                nes.controller_set(Button::Right);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Right),
-                ..
-            } => {
-                nes.controller_unset(Button::Right);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Left),
-                ..
-            } => {
-                nes.controller_set(Button::Left);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Left),
-                ..
-            } => {
-                nes.controller_unset(Button::Left);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Return),
-                ..
-            } => {
-                nes.controller_set(Button::Start);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Return),
-                ..
-            } => {
-                nes.controller_unset(Button::Start);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::RShift),
-                ..
-            } => {
-                nes.controller_set(Button::Select);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::RShift),
-                ..
-            } => {
-                nes.controller_unset(Button::Select);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::A),
-                ..
-            } => {
-                nes.controller_set(Button::A);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::A),
-                ..
-            } => {
-                nes.controller_unset(Button::A);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::S),
-                ..
-            } => {
-                nes.controller_set(Button::B);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::S),
-                ..
-            } => {
-                nes.controller_unset(Button::B);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::R),
-                ..
-            } => {
-                nes.reset();
-            }
-            _ => {}
-        }
-    }
+//         canvas
+//             .copy(&screen, None, screen_rect)
+//             .expect("failed to render screen texture");
 
-    false
-}
+//         canvas
+//             .copy(&palette, None, palette_rect)
+//             .expect("failed to render chr right texture");
+
+//         canvas.present();
+//     }
+// }
+
+// fn handle_input(nes: &mut Nes, event_pump: &mut EventPump) -> bool {
+//     for event in event_pump.poll_iter() {
+//         match event {
+//             Event::Quit { .. }
+//             | Event::KeyDown {
+//                 keycode: Some(Keycode::Escape),
+//                 ..
+//             } => {
+//                 return true;
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::Down),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::Down);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::Down),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::Down);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::Up),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::Up);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::Up),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::Up);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::Right),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::Right);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::Right),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::Right);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::Left),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::Left);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::Left),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::Left);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::Return),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::Start);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::Return),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::Start);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::RShift),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::Select);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::RShift),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::Select);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::A),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::A);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::A),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::A);
+//             }
+//             Event::KeyUp {
+//                 keycode: Some(Keycode::S),
+//                 ..
+//             } => {
+//                 nes.controller_set(Button::B);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::S),
+//                 ..
+//             } => {
+//                 nes.controller_unset(Button::B);
+//             }
+//             Event::KeyDown {
+//                 keycode: Some(Keycode::R),
+//                 ..
+//             } => {
+//                 nes.reset();
+//             }
+//             _ => {}
+//         }
+//     }
+
+//     false
+// }

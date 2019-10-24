@@ -22,6 +22,8 @@ impl Mapper {
             bank2: banks.saturating_sub(1),
         }
     }
+
+    pub fn cpu_cycle(&mut self) {}
 }
 
 impl Access for Mapper {

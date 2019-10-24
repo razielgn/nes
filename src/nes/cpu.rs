@@ -2,20 +2,20 @@ use self::Status::*;
 use crate::{
     bits::{BitOps, HighLowBits},
     instruction::{AddressingMode, Label, Label::*},
+    mapper::Mapper,
     memory::MutAccess,
     pin::Pin,
+    ppu::Ppu,
 };
 use log::*;
+use std::{cell::RefCell, rc::Rc};
 
 const NMI_VECTOR: u16 = 0xFFFA;
 const RESET_VECTOR: u16 = 0xFFFC;
-const BRK_VECTOR: u16 = 0xFFFE;
+const IRQ_VECTOR: u16 = 0xFFFE;
 
-pub type Cycles = usize;
-
-#[derive(Clone, Debug)]
 pub struct Cpu {
-    pub cycles: Cycles,
+    pub cycles: usize,
     pub pc: u16,
     pub sp: u8,
     pub p: P,
@@ -29,15 +29,19 @@ pub struct Cpu {
     pub op_arg: u16,
 
     nmi_pin: Pin,
+    ppu: Rc<RefCell<Ppu>>,
+    mapper: Rc<RefCell<Mapper>>,
+    memory: Box<dyn MutAccess>,
 }
 
 impl Cpu {
-    #[cfg(test)]
-    pub fn with_pc(pc: u16) -> Self {
-        Self::with_pc_and_nmi_pin(pc, Pin::default())
-    }
-
-    pub fn with_pc_and_nmi_pin(pc: u16, nmi_pin: Pin) -> Self {
+    pub fn new(
+        pc: u16,
+        nmi_pin: Pin,
+        memory: Box<dyn MutAccess>,
+        ppu: Rc<RefCell<Ppu>>,
+        mapper: Rc<RefCell<Mapper>>,
+    ) -> Self {
         Self {
             cycles: 0,
             pc,
@@ -51,6 +55,9 @@ impl Cpu {
             label: KIL,
             op_arg: 0,
             nmi_pin,
+            memory,
+            ppu,
+            mapper,
         }
     }
 
@@ -58,30 +65,32 @@ impl Cpu {
         self.pc = addr;
     }
 
-    fn perform_interrupt<M: MutAccess>(&mut self, mem: &mut M, addr: u16) {
+    fn perform_interrupt(&mut self, addr: u16) {
+        self.dummy_read();
+        self.dummy_read();
+
         let pc = self.pc;
-        self.push_double(pc, mem);
-        self.php(mem);
-        self.pc = self.read_word(addr, mem);
+        self.push_double(pc);
+        self.php();
+        self.pc = self.read_word(addr);
         self.p.set(InterruptDisable);
-        self.cycles += 7;
     }
 
-    pub fn reset<M: MutAccess>(&mut self, mem: &mut M) {
+    pub fn reset(&mut self) {
         self.nmi_pin.clear();
 
-        self.pc = self.read_word(RESET_VECTOR, mem);
+        self.pc = self.read_word(RESET_VECTOR);
         self.p.set(InterruptDisable);
         self.sp = self.sp.wrapping_sub(3);
 
         self.cycles = 0;
     }
 
-    pub fn step<M: MutAccess>(&mut self, mem: &mut M) -> Cycles {
+    pub fn step(&mut self) -> usize {
         trace!("step");
 
         let old_cycles = self.cycles;
-        self.fetch_op(mem);
+        self.fetch_op();
 
         match self.label {
             JMP => {
@@ -90,80 +99,76 @@ impl Cpu {
             }
             JSR => {
                 let addr = self.op_arg;
-                self.dummy_read(mem);
+                self.dummy_read();
                 let pc = self.pc;
-                self.push_double(pc - 1, mem);
+                self.push_double(pc - 1);
                 self.jump(addr);
             }
             RTS => {
-                let addr = self.pop_double(mem) + 1;
-                self.dummy_read(mem);
-                self.dummy_read(mem);
+                let addr = self.pop_double() + 1;
+                self.dummy_read();
+                self.dummy_read();
                 self.jump(addr);
             }
             RTI => {
-                self.dummy_read(mem);
-                self.pop_p(mem);
+                self.dummy_read();
+                self.pop_p();
 
-                let addr = self.pop_double(mem);
+                let addr = self.pop_double();
                 self.jump(addr);
             }
-            PHP => self.php(mem),
+            PHP => self.php(),
             PHA => {
-                let a = self.a;
-                self.push(a, mem);
+                self.push(self.a);
             }
             PLA => {
-                self.dummy_read(mem);
-                self.a = self.pop(mem);
+                self.dummy_read();
+                self.a = self.pop();
                 self.p.set_if_zn(self.a);
             }
             PLP => {
-                self.dummy_read(mem);
-                self.pop_p(mem);
+                self.dummy_read();
+                self.pop_p();
             }
             LDA => {
                 let addr = self.op_arg;
-                self.a = self.read(addr, mem);
+                self.a = self.read(addr);
                 self.p.set_if_zn(self.a);
             }
             LDX => {
                 let addr = self.op_arg;
-                self.x = self.read(addr, mem);
+                self.x = self.read(addr);
                 self.p.set_if_zn(self.x);
             }
             LDY => {
                 let addr = self.op_arg;
-                self.y = self.read(addr, mem);
+                self.y = self.read(addr);
                 self.p.set_if_zn(self.y);
             }
             STX => {
                 let addr = self.op_arg;
-                let x = self.x;
-                self.write(addr, x, mem);
+                self.write(addr, self.x);
             }
             STY => {
                 let addr = self.op_arg;
-                let y = self.y;
-                self.write(addr, y, mem);
+                self.write(addr, self.y);
             }
             STA => {
                 let addr = self.op_arg;
-                let a = self.a;
-                self.write(addr, a, mem);
+                self.write(addr, self.a);
             }
             LAX => {
                 let addr = self.op_arg;
-                self.a = self.read(addr, mem);
+                self.a = self.read(addr);
                 self.x = self.a;
                 self.p.set_if_zn(self.x);
             }
             SAX => {
                 let addr = self.op_arg;
                 let m = self.a & self.x;
-                self.write(addr, m, mem);
+                self.write(addr, m);
             }
-            NOP => self.nop(mem),
+            NOP => self.nop(),
             SEC => {
                 self.p.set(CarryFlag);
             }
@@ -182,39 +187,39 @@ impl Cpu {
             }
             BCS => {
                 let branch = self.p.is_set(CarryFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BCC => {
                 let branch = !self.p.is_set(CarryFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BEQ => {
                 let branch = self.p.is_set(ZeroFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BNE => {
                 let branch = !self.p.is_set(ZeroFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BVS => {
                 let branch = self.p.is_set(OverflowFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BVC => {
                 let branch = !self.p.is_set(OverflowFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BMI => {
                 let branch = self.p.is_set(NegativeFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BPL => {
                 let branch = !self.p.is_set(NegativeFlag);
-                self.branch_relative(mem, branch);
+                self.branch_relative(branch);
             }
             BIT => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 let res = self.a & m;
 
                 self.p.set_if_zero(res);
@@ -223,46 +228,46 @@ impl Cpu {
             }
             AND => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.and(m);
             }
             ORA => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.ora(m);
             }
             EOR => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.eor(m);
             }
             CMP => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.cmp(m)
             }
             CPY => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 let n = self.y.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.y >= m);
                 self.p.set_if_zn(n);
             }
             CPX => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 let n = self.x.wrapping_sub(m);
                 self.p.set_if(CarryFlag, self.x >= m);
                 self.p.set_if_zn(n);
             }
             ADC => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.adc(m);
             }
             SBC => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.sbc(m);
             }
             INY => {
@@ -302,45 +307,45 @@ impl Cpu {
                 self.p.set_if_zn(self.x);
             }
             LSR => {
-                self.lsr(mem);
+                self.lsr();
             }
             ASL => {
-                self.asl(mem);
+                self.asl();
             }
             ROR => {
-                self.ror(mem);
+                self.ror();
             }
             ROL => {
-                self.rol(mem);
+                self.rol();
             }
             INC => {
-                self.inc(mem);
+                self.inc();
             }
             DEC => {
-                self.dec(mem);
+                self.dec();
             }
             DCP => {
-                let m = self.dec(mem);
+                let m = self.dec();
                 self.cmp(m);
             }
             ISB => {
-                let m = self.inc(mem);
+                let m = self.inc();
                 self.sbc(m);
             }
             SLO => {
-                let m = self.asl(mem);
+                let m = self.asl();
                 self.ora(m);
             }
             RLA => {
-                let m = self.rol(mem);
+                let m = self.rol();
                 self.and(m);
             }
             RRA => {
-                let m = self.ror(mem);
+                let m = self.ror();
                 self.adc(m);
             }
             SRE => {
-                let m = self.lsr(mem);
+                let m = self.lsr();
                 self.eor(m);
             }
             CLI => {
@@ -348,13 +353,13 @@ impl Cpu {
             }
             ANC => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.and(m);
                 self.p.copy(NegativeFlag, CarryFlag);
             }
             ALR => {
                 let addr = self.op_arg;
-                self.a &= self.read(addr, mem);
+                self.a &= self.read(addr);
                 self.p.set_if(CarryFlag, self.a.is_bit_set(0));
 
                 self.a >>= 1;
@@ -363,7 +368,7 @@ impl Cpu {
             }
             ARR => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 self.and(m);
                 self.ror_acc();
 
@@ -373,7 +378,7 @@ impl Cpu {
             }
             AXS => {
                 let addr = self.op_arg;
-                let m = self.read(addr, mem);
+                let m = self.read(addr);
                 let n = (self.a & self.x).wrapping_sub(m);
 
                 self.p.set_if(CarryFlag, (self.a & self.x) >= m);
@@ -386,80 +391,83 @@ impl Cpu {
                 let val = self.y & (hi + 1);
 
                 let addr = u16::from_hilo(val, lo);
-                self.write(addr, val, mem);
+                self.write(addr, val);
             }
             SHX => {
                 let (hi, lo) = self.op_arg.split();
                 let val = self.x & (hi + 1);
 
                 let addr = u16::from_hilo(val, lo);
-                self.write(addr, val, mem);
+                self.write(addr, val);
             }
             BRK => {
-                let pc = self.pc + 1;
-                self.push_double(pc, mem);
+                self.push_double(self.pc + 1);
 
-                self.php(mem);
+                self.php();
                 self.sei();
 
-                self.pc = self.read_word(BRK_VECTOR, mem);
+                let vector = if self.nmi_pin.is_pulled() {
+                    self.nmi_pin.clear();
+                    NMI_VECTOR
+                } else {
+                    IRQ_VECTOR
+                };
+
+                self.pc = self.read_word(vector);
             }
             label => panic!("can't execute op 0x{:02X} {:?}", self.op, label),
         }
 
-        debug!("{:X?}", self);
-
         if self.nmi_pin.is_pulled() {
             debug!("handling NMI");
-            self.perform_interrupt(mem, NMI_VECTOR);
+            self.perform_interrupt(NMI_VECTOR);
             self.nmi_pin.clear();
         }
-
         self.nmi_pin.decr_delay();
 
         self.cycles - old_cycles
     }
 
-    fn nop<M: MutAccess>(&mut self, mem: &mut M) {
+    fn nop(&mut self) {
         use crate::instruction::AddressingMode::*;
 
         match self.addr_mode {
             None | Accumulator | Implied | Relative => {}
             _ => {
                 let addr = self.op_arg;
-                let _ = self.read(addr, mem);
+                let _ = self.read(addr);
             }
         }
     }
 
-    fn php<M: MutAccess>(&mut self, mem: &mut M) {
+    fn php(&mut self) {
         let mut p = self.p;
         p.set(BreakCommand);
 
-        self.push(p.into(), mem);
+        self.push(p.into());
     }
 
     fn sei(&mut self) {
         self.p.set(InterruptDisable);
     }
 
-    fn inc<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn inc(&mut self) -> u8 {
         let addr = self.op_arg;
-        let mut m = self.read(addr, mem);
-        self.write(addr, m, mem); // Dummy write
+        let mut m = self.read(addr);
+        self.write(addr, m); // Dummy write
         m = m.wrapping_add(1);
         self.p.set_if_zn(m);
-        self.write(addr, m, mem);
+        self.write(addr, m);
         m
     }
 
-    fn dec<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn dec(&mut self) -> u8 {
         let addr = self.op_arg;
-        let mut m = self.read(addr, mem);
-        self.write(addr, m, mem); // Dummy write
+        let mut m = self.read(addr);
+        self.write(addr, m); // Dummy write
         m = m.wrapping_sub(1);
         self.p.set_if_zn(m);
-        self.write(addr, m, mem);
+        self.write(addr, m);
         m
     }
 
@@ -492,7 +500,7 @@ impl Cpu {
         self.a = sub;
     }
 
-    fn asl<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn asl(&mut self) -> u8 {
         if self.addr_mode == AddressingMode::Accumulator {
             self.p.set_if(CarryFlag, self.a.is_bit_set(7));
             self.a <<= 1;
@@ -500,17 +508,17 @@ impl Cpu {
             self.a
         } else {
             let addr = self.op_arg;
-            let mut m = self.read(addr, mem);
-            self.write(addr, m, mem); // Dummy write
+            let mut m = self.read(addr);
+            self.write(addr, m); // Dummy write
             self.p.set_if(CarryFlag, m.is_bit_set(7));
             m <<= 1;
             self.p.set_if_zn(m);
-            self.write(addr, m, mem);
+            self.write(addr, m);
             m
         }
     }
 
-    fn ror<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn ror(&mut self) -> u8 {
         if self.addr_mode == AddressingMode::Accumulator {
             self.ror_acc();
             0 // TODO: extract ror_addr
@@ -518,13 +526,13 @@ impl Cpu {
             let addr = self.op_arg;
             let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
-            let mut m = self.read(addr, mem);
-            self.write(addr, m, mem); // Dummy write
+            let mut m = self.read(addr);
+            self.write(addr, m); // Dummy write
 
             self.p.set_if(CarryFlag, m.is_bit_set(0));
             m = (m >> 1) | (c << 7);
             self.p.set_if_zn(m);
-            self.write(addr, m, mem);
+            self.write(addr, m);
             m
         }
     }
@@ -536,7 +544,7 @@ impl Cpu {
         self.p.set_if_zn(self.a);
     }
 
-    fn rol<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn rol(&mut self) -> u8 {
         let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
 
         if self.addr_mode == AddressingMode::Accumulator {
@@ -546,13 +554,13 @@ impl Cpu {
             self.a
         } else {
             let addr = self.op_arg;
-            let mut m = self.read(addr, mem);
-            self.write(addr, m, mem); // Dummy write
+            let mut m = self.read(addr);
+            self.write(addr, m); // Dummy write
 
             self.p.set_if(CarryFlag, m.is_bit_set(7));
             m = (m << 1) | c;
             self.p.set_if_zn(m);
-            self.write(addr, m, mem);
+            self.write(addr, m);
             m
         }
     }
@@ -588,7 +596,7 @@ impl Cpu {
         self.a = sum;
     }
 
-    fn lsr<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn lsr(&mut self) -> u8 {
         let addr = self.op_arg;
 
         if self.addr_mode == AddressingMode::Accumulator {
@@ -597,22 +605,21 @@ impl Cpu {
             self.p.set_if_zn(self.a);
             self.a
         } else {
-            let mut m = self.read(addr, mem);
-            self.write(addr, m, mem); // Dummy write
+            let mut m = self.read(addr);
+            self.write(addr, m); // Dummy write
             self.p.set_if(CarryFlag, m.is_bit_set(0));
             m >>= 1;
             self.p.set_if_zn(m);
-            self.write(addr, m, mem);
+            self.write(addr, m);
             m
         }
     }
 
-    fn branch_relative<M: MutAccess>(&mut self, mem: &mut M, branch: bool) {
-        let offset_addr = self.op_arg;
-        let offset = u16::from(self.read(offset_addr, mem));
+    fn branch_relative(&mut self, branch: bool) {
+        let offset = u16::from(self.read(self.op_arg));
 
         if branch {
-            self.dummy_read(mem);
+            self.dummy_read();
 
             let prev_pc = self.pc;
 
@@ -623,71 +630,85 @@ impl Cpu {
 
             if self.pc & 0xFF00 != prev_pc & 0xFF00 {
                 trace!("page crossed during branch");
-                self.dummy_read(mem);
+                self.dummy_read();
             }
         }
     }
 
-    fn dummy_read<M: MutAccess>(&mut self, mem: &mut M) {
-        trace!("dummy read");
-        let pc = self.pc;
-        let _ = self.read(pc, mem);
+    fn dummy_read(&mut self) {
+        let _ = self.read(self.pc);
     }
 
-    fn read<M: MutAccess>(&mut self, addr: u16, mem: &mut M) -> u8 {
+    fn read(&mut self, addr: u16) -> u8 {
         self.inc_cycles();
-        mem.mut_read(addr)
+        self.memory.mut_read(addr)
     }
 
-    fn read_word<M: MutAccess>(&mut self, addr: u16, mem: &mut M) -> u16 {
+    fn read_word(&mut self, addr: u16) -> u16 {
         self.inc_cycles();
         self.inc_cycles();
-        mem.mut_read_word(addr)
+        self.memory.mut_read_word(addr)
     }
 
-    fn read_word_indirect_hw_bug<M: MutAccess>(
-        &mut self,
-        addr: u16,
-        mem: &mut M,
-    ) -> u16 {
+    fn read_word_indirect_hw_bug(&mut self, addr: u16) -> u16 {
         self.inc_cycles();
         self.inc_cycles();
-        mem.mut_read_word_bug(addr)
+        self.memory.mut_read_word_bug(addr)
     }
 
-    fn read_word_page_wraparound<M: MutAccess>(&mut self, mem: &mut M) -> u16 {
-        let lo = self.read(0xff, mem);
-        let hi = self.read(0x00, mem);
+    fn read_word_page_wraparound(&mut self) -> u16 {
+        let lo = self.read(0xff);
+        let hi = self.read(0x00);
         u16::from_hilo(hi, lo)
     }
 
-    fn write<M: MutAccess>(&mut self, addr: u16, val: u8, mem: &mut M) {
+    fn write(&mut self, addr: u16, val: u8) {
         self.inc_cycles();
-        mem.write(addr, val);
+
+        if addr == 0x4014 {
+            self.dma_transfer(val);
+        } else {
+            self.memory.write(addr, val);
+        }
+    }
+
+    fn dma_transfer(&mut self, offset: u8) {
+        if self.cycles % 2 != 0 {
+            self.dummy_read();
+        }
+
+        self.dummy_read();
+
+        for i in 0..256 {
+            let val = self.read(u16::from(offset) * 0x100 + i);
+            self.write(0x2004, val);
+        }
     }
 
     fn inc_cycles(&mut self) {
         self.cycles += 1;
+
+        self.mapper.borrow_mut().cpu_cycle();
+        self.ppu.borrow_mut().cpu_cycle();
     }
 
-    fn fetch_op<M: MutAccess>(&mut self, mem: &mut M) {
-        let pc = self.pc;
-        self.op = self.read(pc, mem);
+    fn fetch_op(&mut self) {
+        self.op = self.read(self.pc);
         self.label = self.op.into();
         self.pc += 1;
 
         self.addr_mode = self.op.into();
-        self.op_arg_from_mode(mem);
+        self.op_arg_from_mode();
     }
 
-    fn op_arg_from_mode<M: MutAccess>(&mut self, mem: &mut M) {
+    fn op_arg_from_mode(&mut self) {
         use crate::instruction::AddressingMode::*;
 
         let pc = self.pc;
         self.op_arg = match self.addr_mode {
             None => 0,
             Accumulator | Implied => {
-                self.dummy_read(mem);
+                self.dummy_read();
                 0
             }
             Immediate | Relative => {
@@ -695,53 +716,53 @@ impl Cpu {
                 pc
             }
             ZeroPage => {
-                let val = self.read(pc, mem);
+                let val = self.read(pc);
                 self.pc += 1;
                 u16::from(val)
             }
             ZeroPageX => {
-                let val = self.read(pc, mem);
+                let val = self.read(pc);
                 self.pc += 1;
-                let _ = self.read(u16::from(val), mem);
+                let _ = self.read(u16::from(val));
                 u16::from(val.wrapping_add(self.x))
             }
             ZeroPageY => {
-                let val = self.read(pc, mem);
+                let val = self.read(pc);
                 self.pc += 1;
-                let _ = self.read(u16::from(val), mem);
+                let _ = self.read(u16::from(val));
                 u16::from(val.wrapping_add(self.y))
             }
             Indirect => {
-                let addr = self.read_word(pc, mem);
+                let addr = self.read_word(pc);
                 self.pc += 2;
-                self.read_word_indirect_hw_bug(addr, mem)
+                self.read_word_indirect_hw_bug(addr)
             }
             Absolute => {
-                let addr = self.read_word(pc, mem);
+                let addr = self.read_word(pc);
                 self.pc += 2;
                 addr
             }
             IndexedIndirect => {
-                let mut zero = self.read(pc, mem);
+                let mut zero = self.read(pc);
                 self.pc += 1;
-                let _ = self.read(u16::from(zero), mem); // Dummy read
+                let _ = self.read(u16::from(zero)); // Dummy read
 
                 zero = zero.wrapping_add(self.x);
                 if zero == 0xff {
-                    self.read_word_page_wraparound(mem)
+                    self.read_word_page_wraparound()
                 } else {
-                    self.read_word(u16::from(zero), mem)
+                    self.read_word(u16::from(zero))
                 }
             }
             IndirectIndexed(dummy_read) => {
-                let zero = self.read(pc, mem);
+                let zero = self.read(pc);
                 self.pc += 1;
 
                 let addr = if zero == 0xff {
                     trace!("zero page wraparound");
-                    self.read_word_page_wraparound(mem)
+                    self.read_word_page_wraparound()
                 } else {
-                    self.read_word(u16::from(zero), mem)
+                    self.read_word(u16::from(zero))
                 };
 
                 let page_crossed = is_page_crossed(addr, u16::from(self.y));
@@ -752,13 +773,13 @@ impl Cpu {
                         addr.wrapping_add(u16::from(self.y))
                     };
 
-                    let _ = self.read(dummy_read_addr, mem);
+                    let _ = self.read(dummy_read_addr);
                 }
 
                 addr.wrapping_add(u16::from(self.y))
             }
             AbsoluteX(dummy_read) => {
-                let addr = self.read_word(pc, mem);
+                let addr = self.read_word(pc);
                 self.pc += 2;
 
                 let page_crossed = is_page_crossed(addr, u16::from(self.x));
@@ -769,13 +790,13 @@ impl Cpu {
                         addr.wrapping_add(u16::from(self.x))
                     };
 
-                    let _ = self.read(dummy_read_addr, mem);
+                    let _ = self.read(dummy_read_addr);
                 }
 
                 addr.wrapping_add(u16::from(self.x))
             }
             AbsoluteY(dummy_read) => {
-                let addr = self.read_word(pc, mem);
+                let addr = self.read_word(pc);
                 self.pc += 2;
 
                 let page_crossed = is_page_crossed(addr, u16::from(self.y));
@@ -786,7 +807,7 @@ impl Cpu {
                         addr.wrapping_add(u16::from(self.y))
                     };
 
-                    let _ = self.read(dummy_read_addr, mem);
+                    let _ = self.read(dummy_read_addr);
                 }
 
                 addr.wrapping_add(u16::from(self.y))
@@ -794,31 +815,31 @@ impl Cpu {
         };
     }
 
-    fn push<M: MutAccess>(&mut self, val: u8, mem: &mut M) {
+    fn push(&mut self, val: u8) {
         let addr = 0x100_u16.wrapping_add(u16::from(self.sp));
-        self.write(addr, val, mem);
+        self.write(addr, val);
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    fn push_double<M: MutAccess>(&mut self, val: u16, mem: &mut M) {
-        self.push(val.high(), mem);
-        self.push(val.low(), mem);
+    fn push_double(&mut self, val: u16) {
+        self.push(val.high());
+        self.push(val.low());
     }
 
-    fn pop<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
+    fn pop(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let addr = 0x100_u16.wrapping_add(u16::from(self.sp));
-        self.read(addr, mem)
+        self.read(addr)
     }
 
-    fn pop_double<M: MutAccess>(&mut self, mem: &mut M) -> u16 {
-        let lo = self.pop(mem);
-        let hi = self.pop(mem);
+    fn pop_double(&mut self) -> u16 {
+        let lo = self.pop();
+        let hi = self.pop();
         u16::from_hilo(hi, lo)
     }
 
-    fn pop_p<M: MutAccess>(&mut self, mem: &mut M) {
-        self.p = self.pop(mem).into();
+    fn pop_p(&mut self) {
+        self.p = self.pop().into();
         self.p.unset(Status::BreakCommand);
         self.p.set(Status::UnusedFlag);
     }

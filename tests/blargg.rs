@@ -1,7 +1,8 @@
 extern crate nes;
 
 use colored::*;
-use nes::{Access, Cycles, Nes};
+use nes::{Access, Nes, NullRenderer};
+use std::{cell::RefCell, rc::Rc};
 
 macro_rules! run {
     ($path:expr) => {
@@ -842,11 +843,12 @@ mod cpu_exec_space {
     }
 }
 
-const RESET_DELAY: Cycles = 410_000;
+const RESET_DELAY: usize = 410_000;
 
 fn run_test_rom(buf: &[u8]) {
-    let mut nes = Nes::from_buf(buf);
-    let mut reset_delay: Option<Cycles> = None;
+    let null_renderer = Rc::new(RefCell::new(NullRenderer));
+    let mut nes = Nes::from_buf(buf, null_renderer);
+    let mut reset_delay: Option<usize> = None;
 
     loop {
         let elapsed_cycles = nes.step();

@@ -4,7 +4,7 @@ use clap::{
     crate_authors, crate_description, crate_name, crate_version, App, Arg,
 };
 use nes::Nes;
-use std::{fs::File, str::FromStr};
+use std::{cell::RefCell, fs::File, rc::Rc, str::FromStr};
 
 mod sdl;
 
@@ -59,8 +59,12 @@ fn main() {
     let debug = matches.is_present("debug");
     let scale = u32::from_str(matches.value_of("scale").unwrap()).unwrap();
 
-    let nes = Nes::from_path(path);
-    sdl::run(nes, debug, scale)
+    let sdl = Rc::new(RefCell::new(sdl::SdlRenderer::new(debug, scale).unwrap()));
+    let mut nes = Nes::from_path(path, sdl.clone());
+
+    while sdl.borrow().is_running() {
+        nes.step();
+    }
 }
 
 fn init_logger(level: &str) {
