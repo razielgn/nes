@@ -8,7 +8,9 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let mut nes = Nes::from_buf(rom);
 
-            nes.step_frame();
+            while !nes.ppu_frame_ready_latch() {
+                nes.step();
+            }
         })
     });
 }

@@ -144,6 +144,7 @@ pub struct Ppu {
 
     current_screen: [u8; 256 * 240],
     prev_screen: [u8; 256 * 240],
+    pub(crate) frame_ready: bool,
 
     mirroring: Mirroring,
 }
@@ -175,6 +176,7 @@ impl Ppu {
             tile_data: 0,
             current_screen: [0; 256 * 240],
             prev_screen: [0; 256 * 240],
+            frame_ready: false,
             mirroring: Mirroring::Vertical,
             sprite_count: 0,
             sprite_patterns: [0; 8],
@@ -258,6 +260,8 @@ impl Ppu {
                 trace!("vblank starts");
 
                 mem::swap(&mut self.current_screen, &mut self.prev_screen);
+                self.frame_ready = true;
+
                 self.status.set_vblank();
 
                 if self.control.nmi_at_next_vblank() {

@@ -28,8 +28,6 @@ use std::{
     path::Path,
 };
 
-const CYCLES_FULL_FRAME: usize = 341 * 262;
-
 #[derive(Clone)]
 pub struct Nes {
     cpu: Cpu,
@@ -110,10 +108,13 @@ impl Nes {
         cycles
     }
 
-    pub fn step_frame(&mut self) {
-        for _ in 0..CYCLES_FULL_FRAME {
-            self.step();
+    pub fn ppu_frame_ready_latch(&mut self) -> bool {
+        if self.ppu.frame_ready {
+            self.ppu.frame_ready = false;
+            return true;
         }
+
+        false
     }
 
     pub fn controller_set(&mut self, button: Button) {

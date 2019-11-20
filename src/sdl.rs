@@ -6,6 +6,7 @@ use sdl2::{
     rect::Rect,
     EventPump,
 };
+use std::time::Instant;
 
 pub fn run(nes: Nes, debug: bool, scale: u32) {
     if debug {
@@ -23,12 +24,16 @@ fn run_normal(mut nes: Nes, scale: u32) {
 
     let window = video_subsystem
         .window("NES", screen_rect.width(), screen_rect.height())
-        .allow_highdpi()
         .position_centered()
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas().build().unwrap();
+    let mut canvas = window
+        .into_canvas()
+        .accelerated()
+        .present_vsync()
+        .build()
+        .unwrap();
 
     let texture_creator = canvas.texture_creator();
     let mut screen = texture_creator
@@ -37,27 +42,47 @@ fn run_normal(mut nes: Nes, scale: u32) {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
+    let mut t1 = Instant::now();
+    let mut frame_counter = 0usize;
+
     loop {
-        if handle_input(&mut nes, &mut event_pump) {
-            break;
+        nes.step();
+
+        if nes.ppu_frame_ready_latch() {
+            frame_counter += 1;
+
+            if frame_counter % 10 == 0 {
+                let frame_elapsed = t1.elapsed();
+                canvas
+                    .window_mut()
+                    .set_title(&format!(
+                        "NES (frame {:.1}ms)",
+                        frame_elapsed.as_secs_f32() * 1000.0
+                    ))
+                    .expect("failed to set window title");
+            }
+
+            if handle_input(&mut nes, &mut event_pump) {
+                break;
+            }
+
+            screen
+                .with_lock(None, |buf, _pitch| {
+                    nes.render_screen(buf).unwrap();
+                })
+                .expect("failed to update screen texture");
+
+            canvas.clear();
+            canvas.set_draw_color(Color::RGB(30, 30, 30));
+
+            canvas
+                .copy(&screen, None, screen_rect)
+                .expect("failed to render screen texture");
+
+            canvas.present();
+
+            t1 = Instant::now();
         }
-
-        nes.step_frame();
-
-        screen
-            .with_lock(None, |buf, _pitch| {
-                nes.render_screen(buf).unwrap();
-            })
-            .expect("failed to update screen texture");
-
-        canvas.clear();
-        canvas.set_draw_color(Color::RGB(30, 30, 30));
-
-        canvas
-            .copy(&screen, None, screen_rect)
-            .expect("failed to render screen texture");
-
-        canvas.present();
     }
 }
 
@@ -120,57 +145,77 @@ fn run_debug(mut nes: Nes, scale: u32) {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
+    let mut t1 = Instant::now();
+    let mut frame_counter = 0usize;
+
     loop {
-        if handle_input(&mut nes, &mut event_pump) {
-            break;
+        nes.step();
+
+        if nes.ppu_frame_ready_latch() {
+            frame_counter += 1;
+
+            if frame_counter % 10 == 0 {
+                let frame_elapsed = t1.elapsed();
+                canvas
+                    .window_mut()
+                    .set_title(&format!(
+                        "NES (frame {:.1}ms)",
+                        frame_elapsed.as_secs_f32() * 1000.0
+                    ))
+                    .expect("failed to set window title");
+            }
+
+            if handle_input(&mut nes, &mut event_pump) {
+                break;
+            }
+
+            chr_left
+                .with_lock(None, |buf, _pitch| {
+                    nes.render_chr_left(buf).unwrap();
+                })
+                .expect("failed to update chr left texture");
+
+            chr_right
+                .with_lock(None, |buf, _pitch| {
+                    nes.render_chr_right(buf).unwrap();
+                })
+                .expect("failed to update chr right texture");
+
+            screen
+                .with_lock(None, |buf, _pitch| {
+                    nes.render_screen(buf).unwrap();
+                })
+                .expect("failed to update screen texture");
+
+            palette
+                .with_lock(None, |buf, _pitch| {
+                    nes.render_palette(buf).unwrap();
+                })
+                .expect("failed to update palette texture");
+
+            canvas.clear();
+            canvas.set_draw_color(Color::RGB(30, 30, 30));
+
+            canvas
+                .copy(&chr_left, None, chr_left_rect)
+                .expect("failed to render chr left texture");
+
+            canvas
+                .copy(&chr_right, None, chr_right_rect)
+                .expect("failed to render chr right texture");
+
+            canvas
+                .copy(&screen, None, screen_rect)
+                .expect("failed to render screen texture");
+
+            canvas
+                .copy(&palette, None, palette_rect)
+                .expect("failed to render chr right texture");
+
+            canvas.present();
+
+            t1 = Instant::now();
         }
-
-        nes.step_frame();
-
-        chr_left
-            .with_lock(None, |buf, _pitch| {
-                nes.render_chr_left(buf).unwrap();
-            })
-            .expect("failed to update chr left texture");
-
-        chr_right
-            .with_lock(None, |buf, _pitch| {
-                nes.render_chr_right(buf).unwrap();
-            })
-            .expect("failed to update chr right texture");
-
-        screen
-            .with_lock(None, |buf, _pitch| {
-                nes.render_screen(buf).unwrap();
-            })
-            .expect("failed to update screen texture");
-
-        palette
-            .with_lock(None, |buf, _pitch| {
-                nes.render_palette(buf).unwrap();
-            })
-            .expect("failed to update palette texture");
-
-        canvas.clear();
-        canvas.set_draw_color(Color::RGB(30, 30, 30));
-
-        canvas
-            .copy(&chr_left, None, chr_left_rect)
-            .expect("failed to render chr left texture");
-
-        canvas
-            .copy(&chr_right, None, chr_right_rect)
-            .expect("failed to render chr right texture");
-
-        canvas
-            .copy(&screen, None, screen_rect)
-            .expect("failed to render screen texture");
-
-        canvas
-            .copy(&palette, None, palette_rect)
-            .expect("failed to render chr right texture");
-
-        canvas.present();
     }
 }
 
