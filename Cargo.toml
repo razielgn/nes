@@ -17,7 +17,7 @@ doc = false
 test = false
 
 [dependencies]
-nom = "5.0"
+nom = { version = "5.0", features = ["std"] }
 log = { version = "0.4", features = ["release_max_level_info"] }
 simplelog = "0.7"
 sdl2 = "0.32.2"
