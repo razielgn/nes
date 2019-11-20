@@ -1,6 +1,6 @@
 use crate::{bits::BitOps, memory::MutAccess, pin::Pin, rom::Mirroring};
 use log::*;
-use std::mem;
+use std::{hint::unreachable_unchecked, mem};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Frame {
@@ -191,18 +191,18 @@ impl Ppu {
     }
 
     pub fn mut_read<M: MutAccess>(&mut self, addr: u16, mapper: &mut M) -> u8 {
-        let val = match 0x2000 + (addr % 8) {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus.as_u8(),
-            0x2002 => self.status(),
-            0x2004 => {
+        let val = match addr % 8 {
+            0 | 1 | 3 | 5 | 6 => self.open_bus.as_u8(),
+            2 => self.status(),
+            4 => {
                 self.open_bus.refresh();
                 self.read_from_oam()
             }
-            0x2007 => {
+            7 => {
                 self.open_bus.refresh();
                 self.mut_read_from_data(mapper)
             }
-            _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
+            _ => unsafe { unreachable_unchecked() },
         };
 
         self.open_bus.set(val);
@@ -210,28 +210,28 @@ impl Ppu {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        match 0x2000 + (addr % 8) {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus.as_u8(),
-            0x2002 => self.status_read_only(),
-            0x2004 => self.read_from_oam(),
-            0x2007 => 0,         // TODO: unimplemented.
-            _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
+        match addr % 8 {
+            0 | 1 | 3 | 5 | 6 => self.open_bus.as_u8(),
+            2 => self.status_read_only(),
+            4 => self.read_from_oam(),
+            7 => 0, // TODO: unimplemented.
+            _ => unsafe { unreachable_unchecked() },
         }
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
         self.open_bus.set(val);
 
-        match 0x2000 + (addr % 8) {
-            0x2000 => self.write_to_control(val),
-            0x2001 => self.mask.set(val),
-            0x2002 => (),
-            0x2003 => self.oam_addr = val,
-            0x2004 => self.write_to_oam(val),
-            0x2005 => self.write_to_scroll(val),
-            0x2006 => self.write_to_addr(val),
-            0x2007 => self.write_to_data(val),
-            _ => unreachable!(), // TODO(low): replace with std::hint::unreachable_unchecked.
+        match addr % 8 {
+            0 => self.write_to_control(val),
+            1 => self.mask.set(val),
+            2 => (),
+            3 => self.oam_addr = val,
+            4 => self.write_to_oam(val),
+            5 => self.write_to_scroll(val),
+            6 => self.write_to_addr(val),
+            7 => self.write_to_data(val),
+            _ => unsafe { unreachable_unchecked() },
         }
 
         self.open_bus.refresh();
