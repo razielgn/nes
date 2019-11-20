@@ -1068,7 +1068,7 @@ mod test {
     #[test]
     fn rol_absolute_x_dummy_read() {
         let mut cpu = Cpu::with_pc(0);
-        let mut m = vec![0x3E, 0x04, 0x00, 0x00, 0x00, 0b01010101];
+        let mut m = vec![0x3E, 0x04, 0x00, 0x00, 0x00, 0b0101_0101];
         cpu.x = 1;
         cpu.step(&mut m);
 
@@ -1077,7 +1077,7 @@ mod test {
         assert_eq!(5, cpu.op_arg);
         assert_eq!(3, cpu.pc);
         assert_eq!(7, cpu.cycles);
-        assert_eq!(0b10101010, m[5]);
+        assert_eq!(0b1010_1010, m[5]);
     }
 
     #[test]

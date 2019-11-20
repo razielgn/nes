@@ -1139,45 +1139,45 @@ mod tests {
         fn vram_addr_incr() {
             let mut control = Control::default();
 
-            control.set(0b00000000);
+            control.set(0b0000_0000);
             assert_eq!(1, control.vram_addr_incr());
-            control.set(0b00000100);
+            control.set(0b0000_0100);
             assert_eq!(32, control.vram_addr_incr());
         }
 
         #[test]
         fn sprite_pattern_table_addr() {
             let mut control = Control::default();
-            control.set(0b00000000);
+            control.set(0b0000_0000);
             assert_eq!(0x0000, control.sprite_pattern_table_addr());
-            control.set(0b00001000);
+            control.set(0b0000_1000);
             assert_eq!(0x1000, control.sprite_pattern_table_addr());
         }
 
         #[test]
         fn background_pattern_table_addr() {
             let mut control = Control::default();
-            control.set(0b00000000);
+            control.set(0b0000_0000);
             assert_eq!(0x0000, control.background_pattern_table_addr());
-            control.set(0b00010000);
+            control.set(0b0001_0000);
             assert_eq!(0x1000, control.background_pattern_table_addr());
         }
 
         #[test]
         fn sprite_height() {
             let mut control = Control::default();
-            control.set(0b00000000);
+            control.set(0b0000_0000);
             assert_eq!(8, control.sprite_height());
-            control.set(0b00100000);
+            control.set(0b0010_0000);
             assert_eq!(16, control.sprite_height());
         }
 
         #[test]
         fn nmi_at_next_vblank() {
             let mut control = Control::default();
-            control.set(0b00000000);
+            control.set(0b0000_0000);
             assert_eq!(false, control.nmi_at_next_vblank());
-            control.set(0b10000000);
+            control.set(0b1000_0000);
             assert_eq!(true, control.nmi_at_next_vblank());
         }
     }
@@ -1188,9 +1188,9 @@ mod tests {
         #[test]
         fn grayscale() {
             let mut mask = Mask::default();
-            mask.set(0b00000000);
+            mask.set(0b0000_0000);
             assert_eq!(false, mask.grayscale());
-            mask.set(0b00000001);
+            mask.set(0b0000_0001);
             assert_eq!(true, mask.grayscale());
         }
     }
@@ -1312,7 +1312,7 @@ mod tests {
         let (mut ppu, mut mapper) = build_ppu();
         ppu.write(0x2000, 0b1000_0000);
 
-        for _ in 0..(CYCLES_TO_VBLANK_SCANLINE + 1) {
+        for _ in 0..=CYCLES_TO_VBLANK_SCANLINE {
             ppu.step(&mut mapper);
         }
         println!("({}, {})", ppu.scanline, ppu.cycle);
@@ -1468,7 +1468,7 @@ mod tests {
 
         ppu.vram_addr.set(0x3F00);
         assert_eq!(
-            0xFF & open_bus_filter_mask,
+            open_bus_filter_mask,
             ppu.mut_read(0x2007, &mut mapper) & open_bus_filter_mask
         );
         assert_eq!(
