@@ -122,12 +122,16 @@ fn run_debug(mut nes: Nes, scale: u32) {
                 + palette_rect.width(),
             chr_left_rect.height() + margin + chr_right_rect.width(),
         )
-        .allow_highdpi()
         .position_centered()
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas().build().unwrap();
+    let mut canvas = window
+        .into_canvas()
+        .accelerated()
+        .present_vsync()
+        .build()
+        .unwrap();
 
     let texture_creator = canvas.texture_creator();
     let mut chr_left = texture_creator
