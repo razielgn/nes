@@ -444,18 +444,18 @@ fn oam_stress() {
 /// written. Reading from a PPU register is more complex. The following
 /// shows the effect of a read from each register:
 ///
-/// 	Addr    Open-bus bits
-/// 			7654 3210
-/// 	- - - - - - - - - - - - - - - -
-/// 	$2000   DDDD DDDD
-/// 	$2001   DDDD DDDD
-/// 	$2002   ---D DDDD
-/// 	$2003   DDDD DDDD
-/// 	$2004   ---- ----
-/// 	$2005   DDDD DDDD
-/// 	$2006   DDDD DDDD
-/// 	$2007   ---- ----   non-palette
-/// 			DD-- ----   palette
+///     Addr    Open-bus bits
+///             7654 3210
+///     - - - - - - - - - - - - - - - -
+///     $2000   DDDD DDDD
+///     $2001   DDDD DDDD
+///     $2002   ---D DDDD
+///     $2003   DDDD DDDD
+///     $2004   ---- ----
+///     $2005   DDDD DDDD
+///     $2006   DDDD DDDD
+///     $2007   ---- ----   non-palette
+///             DD-- ----   palette
 ///
 /// A D means that this bit reads back as whatever is in the decay register
 /// at that bit, and doesn't refresh the decay register at that bit. A -
