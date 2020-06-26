@@ -13,5 +13,5 @@ rust:
 
 script:
   - cargo build --verbose
-  - cargo test --verbose -- --include-ignored
+  - cargo test --verbose
   - cargo bench

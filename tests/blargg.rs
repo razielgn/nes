@@ -113,13 +113,11 @@ mod instr_test_v5 {
     }
 
     #[test]
-    #[ignore]
     fn all_instrs() {
         run!("roms/instr_test_v5/all_instrs.nes");
     }
 
     #[test]
-    #[ignore]
     fn official_only() {
         run!("roms/instr_test_v5/official_only.nes");
     }
