@@ -110,7 +110,7 @@ pub struct Ppu {
     oam_data: [u8; 256],
 
     /// $2005 w x2
-    scroll: u8,
+    fine_x_scroll: u8,
 
     /// $2006 w x2
     /// yyy NN YYYYY XXXXX
@@ -162,7 +162,7 @@ impl Ppu {
             oam_data: [0; 256],
             vram: [0; 0x800],
             palette_ram: PALETTE_RAM_AT_BOOT,
-            scroll: 0,
+            fine_x_scroll: 0,
             vram_addr: VRamAddr::default(),
             temp_vram_addr: 0,
             temp_vram_read_buffer: 0,
@@ -520,7 +520,7 @@ impl Ppu {
         }
 
         let data = self.tile_data >> 32 as u32;
-        let shift = (7 - self.scroll) * 4;
+        let shift = (7 - self.fine_x_scroll) * 4;
         (data >> shift) as u8 & 0x0F
     }
 
@@ -664,7 +664,7 @@ impl Ppu {
             // x:                CBA = d: .... .CBA
             self.temp_vram_addr &= !0b000_0000_0001_1111;
             self.temp_vram_addr |= (u16::from(val) & 0b1111_1000) >> 3;
-            self.scroll = val & 0b111;
+            self.fine_x_scroll = val & 0b111;
         } else {
             // t: CBA ..HG FED. .... = d: HGFE DCBA
             self.temp_vram_addr &= !0b111_0011_1110_0000;
@@ -1389,7 +1389,7 @@ mod tests {
         // $2005 first write (w is 0)
         ppu.write(0x2005, 0b1010_1101);
         assert_eq!(0b000_1100_0001_0101, ppu.temp_vram_addr);
-        assert_eq!(0b101, ppu.scroll);
+        assert_eq!(0b101, ppu.fine_x_scroll);
         assert_eq!(true, ppu.write_toggle);
 
         // $2005 second write (w is 1)j
