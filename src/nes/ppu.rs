@@ -346,6 +346,11 @@ impl Ppu {
                             self.vram_addr.increment_x();
                         }
                     }
+                    // Unused nametable fetches.
+                    337 | 339 => {
+                        let addr = self.vram_addr.nametable_addr();
+                        let _ = self.mem_read(addr, mapper);
+                    }
                     _ => {}
                 },
                 _ => {} // TODO.
