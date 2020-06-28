@@ -583,7 +583,7 @@ impl Ppu {
             }
         };
 
-        self.write_to_screen(y, x, self.read_palette(palette_idx as usize));
+        self.write_to_screen(y, x, self.read_palette(palette_idx));
     }
 
     fn write_to_screen(&mut self, y: u16, x: u16, color: u8) {
@@ -591,12 +591,12 @@ impl Ppu {
         self.current_screen[idx as usize] = color;
     }
 
-    fn read_palette(&self, mut idx: usize) -> u8 {
+    fn read_palette(&self, mut idx: u8) -> u8 {
         if idx >= 16 && idx % 4 == 0 {
             idx -= 16
         }
 
-        self.palette_ram[idx]
+        self.palette_ram[idx as usize]
     }
 
     // $2002
