@@ -46,7 +46,7 @@ impl From<u8> for AddressingMode {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::upper_case_acronyms)]
 pub enum Label {
     ADC,
     AHX,

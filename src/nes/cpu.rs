@@ -896,9 +896,9 @@ impl From<u8> for P {
     }
 }
 
-impl Into<u8> for P {
-    fn into(self) -> u8 {
-        self.0
+impl From<P> for u8 {
+    fn from(p: P) -> Self {
+        p.0
     }
 }
 

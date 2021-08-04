@@ -1185,9 +1185,9 @@ mod tests {
         fn nmi_at_next_vblank() {
             let mut control = Control::default();
             control.set(0b0000_0000);
-            assert_eq!(false, control.nmi_at_next_vblank());
+            assert!(!control.nmi_at_next_vblank());
             control.set(0b1000_0000);
-            assert_eq!(true, control.nmi_at_next_vblank());
+            assert!(control.nmi_at_next_vblank());
         }
     }
 
@@ -1198,9 +1198,9 @@ mod tests {
         fn grayscale() {
             let mut mask = Mask::default();
             mask.set(0b0000_0000);
-            assert_eq!(false, mask.grayscale());
+            assert!(!mask.grayscale());
             mask.set(0b0000_0001);
-            assert_eq!(true, mask.grayscale());
+            assert!(mask.grayscale());
         }
     }
 
@@ -1389,29 +1389,29 @@ mod tests {
 
         // $2002 read
         ppu.mut_read(0x2002, &mut mapper);
-        assert_eq!(false, ppu.write_toggle);
+        assert!(!ppu.write_toggle);
 
         // $2005 first write (w is 0)
         ppu.write(0x2005, 0b1010_1101);
         assert_eq!(0b000_1100_0001_0101, ppu.temp_vram_addr);
         assert_eq!(0b101, ppu.fine_x_scroll);
-        assert_eq!(true, ppu.write_toggle);
+        assert!(ppu.write_toggle);
 
         // $2005 second write (w is 1)j
         ppu.write(0x2005, 0b1110_1101);
         assert_eq!(0b101_1111_1011_0101, ppu.temp_vram_addr);
-        assert_eq!(false, ppu.write_toggle);
+        assert!(!ppu.write_toggle);
 
         // $2006 first write (w is 0)
         ppu.write(0x2006, 0b0010_1010);
         assert_eq!(0b010_1010_1011_0101, ppu.temp_vram_addr);
-        assert_eq!(true, ppu.write_toggle);
+        assert!(ppu.write_toggle);
 
         // $2006 second write (w is 1)
         ppu.write(0x2006, 0b0100_1010);
         assert_eq!(0b010_1010_0100_1010, ppu.temp_vram_addr);
         assert_eq!(ppu.vram_addr.get(), ppu.temp_vram_addr);
-        assert_eq!(false, ppu.write_toggle);
+        assert!(!ppu.write_toggle);
     }
 
     #[test]

@@ -31,7 +31,7 @@ impl Rom {
     }
 
     pub fn from_buf(buf: &[u8]) -> Self {
-        let (_, rom) = Self::parse(&buf).unwrap(); // TODO: error handling
+        let (_, rom) = Self::parse(buf).unwrap(); // TODO: error handling
         rom
     }
 
