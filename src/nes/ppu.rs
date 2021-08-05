@@ -48,6 +48,7 @@ pub struct Ppu {
 
     /// $2000 w
     ///
+    /// ```
     /// 7  bit  0
     /// ---- ----
     /// VPHB SINN
@@ -64,10 +65,12 @@ pub struct Ppu {
     /// |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
     /// +--------- Generate an NMI at the start of the
     /// vertical blanking interval (0: off; 1: on)
+    /// ```
     control: Control,
 
     /// $2001 w
     ///
+    /// ```
     /// 7  bit  0
     /// ---- ----
     /// BGRs bMmG
@@ -80,10 +83,12 @@ pub struct Ppu {
     /// ||+------- Emphasize red*
     /// |+-------- Emphasize green*
     /// +--------- Emphasize blue*
+    /// ```
     mask: Mask,
 
     /// $2002
     ///
+    /// ```
     /// 7  bit  0
     /// ---- ----
     /// VSO. ....
@@ -104,6 +109,7 @@ pub struct Ppu {
     ///            Set at dot 1 of line 241 (the line *after* the post-render
     ///            line); cleared after reading $2002 and at dot 1 of the
     ///            pre-render line.
+    /// ```
     status: Status,
 
     oam_addr: u8,
@@ -113,11 +119,14 @@ pub struct Ppu {
     fine_x_scroll: u8,
 
     /// $2006 w x2
+    ///
+    /// ```
     /// yyy NN YYYYY XXXXX
     /// ||| || ||||| +++++-- coarse X scroll
     /// ||| || +++++-------- coarse Y scroll
     /// ||| ++-------------- nametable select
     /// +++----------------- fine Y scroll
+    /// ```
     vram_addr: VRamAddr,
     temp_vram_addr: u16,
     vram: [u8; 0x800],
