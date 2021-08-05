@@ -585,11 +585,11 @@ impl Ppu {
             (true, false) => sprite | 0x10,
             (false, true) => bg,
             (false, false) => {
-                if self.sprite_indexes[idx] == 0 && x < 255 {
-                    self.status.set_sprite_zero_hit();
-                }
+                if self.sprite_indexes[idx] == 0 {
+                    if x < 255 {
+                        self.status.set_sprite_zero_hit();
+                    }
 
-                if self.sprite_priorities[idx] == 0 {
                     sprite | 0x10
                 } else {
                     bg
