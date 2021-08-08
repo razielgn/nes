@@ -143,7 +143,11 @@ pub struct Ppu {
     attribute_table_byte: u8,
     low_tile_byte: u8,
     high_tile_byte: u8,
-    tile_data: u64,
+
+    shift_attribute_low: u16,
+    shift_attribute_high: u16,
+    shift_pattern_low: u16,
+    shift_pattern_high: u16,
 
     sprite_count: usize,
     sprite_patterns: [u32; 8],
@@ -182,7 +186,10 @@ impl Ppu {
             attribute_table_byte: 0,
             low_tile_byte: 0,
             high_tile_byte: 0,
-            tile_data: 0,
+            shift_attribute_low: 0,
+            shift_attribute_high: 0,
+            shift_pattern_low: 0,
+            shift_pattern_high: 0,
             current_screen: [0; 256 * 240],
             prev_screen: [0; 256 * 240],
             frame_ready: false,
@@ -293,7 +300,7 @@ impl Ppu {
                     match self.cycle {
                         // Data for each tile is fetched.
                         1..=256 => {
-                            self.draw_pixel();
+                            self.draw_pixel(mapper);
                             self.load_tiles(mapper);
 
                             if self.cycle % 8 == 0 {
@@ -394,21 +401,29 @@ impl Ppu {
     }
 
     fn load_tiles<M: MutAccess>(&mut self, mapper: &mut M) {
-        self.tile_data <<= 4;
+        self.shift_pattern_low <<= 1;
+        self.shift_pattern_high <<= 1;
+        self.shift_attribute_low <<= 1;
+        self.shift_attribute_high <<= 1;
 
         match self.cycle % 8 {
             0 => {
-                let mut data: u32 = 0;
-                for _ in 0..8 {
-                    let p1 = (self.low_tile_byte & 0x80) >> 7;
-                    let p2 = (self.high_tile_byte & 0x80) >> 6;
-                    self.low_tile_byte <<= 1;
-                    self.high_tile_byte <<= 1;
-                    data <<= 4;
-                    data |= u32::from(self.attribute_table_byte | p1 | p2);
-                }
-
-                self.tile_data |= u64::from(data);
+                self.shift_pattern_low = (self.shift_pattern_low & 0xFF00)
+                    | u16::from(self.low_tile_byte);
+                self.shift_pattern_high = (self.shift_pattern_high & 0xFF00)
+                    | u16::from(self.high_tile_byte);
+                self.shift_attribute_low = (self.shift_attribute_low & 0xFF00)
+                    | if self.attribute_table_byte & 0b01 != 0 {
+                        0xFF
+                    } else {
+                        0x00
+                    };
+                self.shift_attribute_high = (self.shift_attribute_high & 0xFF00)
+                    | if self.attribute_table_byte & 0b10 != 0 {
+                        0xFF
+                    } else {
+                        0x00
+                    };
             }
             1 => {
                 let addr = self.vram_addr.nametable_addr();
@@ -416,9 +431,17 @@ impl Ppu {
             }
             3 => {
                 let addr = self.vram_addr.attribute_addr();
-                let shift = self.vram_addr.shift();
-                self.attribute_table_byte =
-                    ((self.mem_read(addr, mapper) >> shift) & 3) << 2;
+                self.attribute_table_byte = self.mem_read(addr, mapper);
+
+                if self.vram_addr.coarse_y() & 0b10 > 0 {
+                    self.attribute_table_byte >>= 4;
+                }
+
+                if self.vram_addr.coarse_x() & 0b10 > 0 {
+                    self.attribute_table_byte >>= 2;
+                }
+
+                self.attribute_table_byte &= 0b11;
             }
             5 => {
                 self.low_tile_byte = self.mem_read(self.low_tile_addr(), mapper);
@@ -533,9 +556,17 @@ impl Ppu {
             return 0;
         }
 
-        let data = self.tile_data >> 32 as u32;
-        let shift = (7 - self.fine_x_scroll) * 4;
-        (data >> shift) as u8 & 0x0F
+        let bit_mux = 0b1000000000000000 >> self.fine_x_scroll;
+
+        let pixel_lo = u8::from(self.shift_pattern_low & bit_mux > 0);
+        let pixel_hi = u8::from(self.shift_pattern_high & bit_mux > 0);
+        let pixel = (pixel_hi << 1) | pixel_lo;
+
+        let palette_lo = u8::from(self.shift_attribute_low & bit_mux > 0);
+        let palette_hi = u8::from(self.shift_attribute_high & bit_mux > 0);
+        let palette = (palette_hi << 1) | palette_lo;
+
+        (palette << 2) | pixel
     }
 
     fn sprite_pixel(&self, x: u16) -> (usize, u8) {
@@ -563,7 +594,7 @@ impl Ppu {
         (0, 0)
     }
 
-    fn draw_pixel(&mut self) {
+    fn draw_pixel<M: MutAccess>(&mut self, mapper: &mut M) {
         let x = self.cycle.wrapping_sub(1);
         let y = self.scanline;
 
@@ -597,7 +628,8 @@ impl Ppu {
             }
         };
 
-        self.write_to_screen(y, x, self.read_palette(palette_idx));
+        let color = self.read_color(palette_idx, mapper);
+        self.write_to_screen(y, x, color);
     }
 
     fn write_to_screen(&mut self, y: u16, x: u16, color: u8) {
@@ -605,12 +637,9 @@ impl Ppu {
         self.current_screen[idx as usize] = color;
     }
 
-    fn read_palette(&self, mut idx: u8) -> u8 {
-        if idx >= 16 && idx % 4 == 0 {
-            idx -= 16
-        }
-
-        self.palette_ram[idx as usize]
+    fn read_color<M: MutAccess>(&self, palette_idx: u8, mapper: &mut M) -> u8 {
+        let addr = 0x3F00 + palette_idx as u16;
+        self.mem_read(addr, mapper) & 0x3F
     }
 
     // $2002
@@ -819,7 +848,6 @@ impl Ppu {
         debug!("attribute table byte: {:02X}", self.attribute_table_byte);
         debug!("low tile addr: {:04X}", self.low_tile_addr());
         debug!("high tile addr: {:04X}", self.high_tile_addr());
-        debug!("tile data: {:0X}", self.tile_data);
     }
 
     fn mem_write(&mut self, addr: u16, val: u8) {
@@ -863,7 +891,7 @@ impl Ppu {
     pub fn low_tile_addr(&self) -> u16 {
         self.control
             .background_pattern_table_addr()
-            .wrapping_add(u16::from(self.nametable_byte).wrapping_mul(16))
+            .wrapping_add(u16::from(self.nametable_byte) << 4)
             .wrapping_add(self.vram_addr.fine_y_scroll())
     }
 
@@ -876,12 +904,14 @@ impl Ppu {
     }
 }
 
+/// ```
 /// 010 00 00000 00000
 /// yyy NN YYYYY XXXXX
 /// ||| || ||||| +++++-- coarse X scroll
 /// ||| || +++++-------- coarse Y scroll
 /// ||| ++-------------- nametable select
 /// +++----------------- fine Y scroll
+/// ```
 #[derive(Debug, Clone, Copy, Default)]
 struct VRamAddr(u16);
 
@@ -961,13 +991,17 @@ impl VRamAddr {
     pub fn attribute_addr(self) -> u16 {
         // https://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
         0x23C0
-            | (self.0 & 0x0C00)
-            | ((self.0 >> 4) & 0x38)
-            | ((self.0 >> 2) & 0x07)
+            | (self.0 & 0b110000000000) // nametable x & y
+            | ((self.coarse_y() as u16 >> 2) << 3)
+            | (self.coarse_x() as u16 >> 2)
     }
 
-    pub fn shift(self) -> u16 {
-        ((self.0 >> 4) & 4) | (self.0 & 2)
+    fn coarse_y(self) -> u8 {
+        ((self.0 >> 5) & 0b11111) as u8
+    }
+
+    fn coarse_x(self) -> u8 {
+        (self.0 & 0b11111) as u8
     }
 
     pub fn copy_x(&mut self, t: u16) {
