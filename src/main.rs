@@ -1,82 +1,41 @@
 extern crate nes;
 
-use clap::{
-    crate_authors, crate_description, crate_name, crate_version, App, Arg,
-};
+use clap::Parser;
 use nes::Nes;
-use std::{fs::File, str::FromStr};
+use std::path::PathBuf;
 
 mod sdl;
 
-fn cli_app<'a, 'b>() -> App<'a, 'b> {
-    App::new(crate_name!())
-        .author(crate_authors!())
-        .version(crate_version!())
-        .about(crate_description!())
-        .arg(
-            Arg::with_name("ROM")
-                .required(true)
-                .takes_value(true)
-                .validator(|s| {
-                    File::open(&s).map(|_| ()).map_err(|e| e.to_string())
-                })
-                .help("Path to ROM to load"),
-        )
-        .arg(
-            Arg::with_name("debug")
-                .long("debug")
-                .short("d")
-                .help("Turns on debugging mode"),
-        )
-        .arg(
-            Arg::with_name("log_level")
-                .long("log-level")
-                .short("l")
-                .possible_values(&["error", "warn", "info", "debug", "trace"])
-                .default_value("info")
-                .help("Sets logging level"),
-        )
-        .arg(
-            Arg::with_name("scale")
-                .group("video")
-                .long("scale")
-                .short("s")
-                .default_value("2")
-                .validator(|s| {
-                    u32::from_str(&s).map(|_| ()).map_err(|e| e.to_string())
-                })
-                .help("Sets video scale"),
-        )
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Path to ROM to load
+    rom: PathBuf,
+
+    #[clap(short, long)]
+    debug: bool,
+
+    #[clap(short, long, default_value_t = log::LevelFilter::Info)]
+    log_level: log::LevelFilter,
+
+    #[clap(short, long, default_value_t = 2)]
+    scale: u32,
 }
 
 fn main() {
-    let app = cli_app();
-    let matches = app.get_matches();
+    let args = Args::parse();
 
-    init_logger(matches.value_of("log_level").unwrap());
+    init_logger(args.log_level);
 
-    let path = matches.value_of("ROM").unwrap();
-    let debug = matches.is_present("debug");
-    let scale = u32::from_str(matches.value_of("scale").unwrap()).unwrap();
-
-    let nes = Nes::from_path(path);
-    sdl::run(nes, debug, scale)
+    let nes = Nes::from_path(args.rom);
+    sdl::run(nes, args.debug, args.scale)
 }
 
-fn init_logger(level: &str) {
+fn init_logger(level: log::LevelFilter) {
     use simplelog::*;
 
-    let level_filter = match level {
-        "error" => LevelFilter::Error,
-        "warn" => LevelFilter::Warn,
-        "info" => LevelFilter::Info,
-        "debug" => LevelFilter::Debug,
-        "trace" => LevelFilter::Trace,
-        _ => LevelFilter::Off,
-    };
-
     TermLogger::init(
-        level_filter,
+        level,
         Config::default(),
         TerminalMode::Stderr,
         ColorChoice::Auto,
