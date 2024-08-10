@@ -36,4 +36,4 @@ jobs:
 
       - run: nix flake check -L
 
-      - run: nix flake build -L
+      - run: nix build -L
