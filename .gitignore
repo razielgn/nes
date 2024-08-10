@@ -4,3 +4,4 @@ perf.data.old
 flamegraph.svg
 .DS_Store
 .nvimlog
+/.direnv

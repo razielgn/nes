@@ -9,6 +9,7 @@ pub trait BitOps: Copy + fmt::Binary {
         self.get_bit(i) == 1
     }
 
+    #[allow(dead_code)]
     fn to_bitstring(&self) -> String {
         format!("{:08b}", self)
     }
