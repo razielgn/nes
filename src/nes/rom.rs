@@ -1,5 +1,9 @@
 use crate::bits::BitOps;
-use nom::{do_parse, named, number::complete::le_u8, tag, take};
+use nom::{
+    bytes::complete::{tag, take},
+    number::complete::u8,
+    IResult,
+};
 use std::{fs, path::Path};
 
 const PRG_SIZE: usize = 0x4000;
@@ -26,57 +30,52 @@ pub struct Rom {
 
 impl Rom {
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
-        let buf = fs::read(path).unwrap();
+        let buf = fs::read(path).expect("failed to read rom file");
         Self::from_buf(&buf)
     }
 
     pub fn from_buf(buf: &[u8]) -> Self {
-        let (_, rom) = Self::parse(buf).unwrap(); // TODO: error handling
+        let (_, rom) = Self::parse(buf).expect("failed to parse rom"); // TODO: error handling
         rom
     }
 
-    named!(
-        parse<Self>,
-        do_parse!(
-            tag!("NES\x1A")
-                >> prg_banks: le_u8
-                >> chr_banks: le_u8
-                >> flags_6: le_u8
-                >> flags_7: le_u8
-                >> size_prg_ram: le_u8
-                >> _flags_9: le_u8
-                >> _flags_10: le_u8
-                >> take!(5)
-                >> prg: take!(PRG_SIZE * prg_banks as usize)
-                >> chr: take!(CHR_SIZE * chr_banks as usize)
-                >> ({
-                    let mirroring = if flags_6.is_bit_set(0) {
-                        Mirroring::Vertical
-                    } else {
-                        Mirroring::Horizontal
-                    };
+    fn parse(i: &[u8]) -> IResult<&[u8], Self> {
+        let (i, _) = tag(b"NES\x1A")(i)?;
+        let (i, prg_banks) = u8(i)?;
+        let (i, chr_banks) = u8(i)?;
+        let (i, flags_6) = u8(i)?;
+        let (i, flags_7) = u8(i)?;
+        let (i, size_prg_ram) = u8(i)?;
+        let (i, _flags_9) = u8(i)?;
+        let (i, _flags_10) = u8(i)?;
+        let (i, _) = take(5usize)(i)?;
+        let (i, prg) = take(PRG_SIZE * prg_banks as usize)(i)?;
+        let (i, chr) = take(CHR_SIZE * chr_banks as usize)(i)?;
 
-                    Self {
-                        prg_banks: prg_banks as usize,
-                        prg: prg.to_vec(),
-                        chr_banks: chr_banks as usize,
-                        chr: if chr.is_empty() {
-                            vec![0; CHR_SIZE] // Provide if missing.
-                        } else {
-                            chr.to_vec()
-                        },
-                        mapper_id: assemble_mapper_id(flags_6, flags_7),
-                        sram: [0; SRAM_SIZE],
-                        size_prg_ram: if size_prg_ram == 0 {
-                            1
-                        } else {
-                            size_prg_ram
-                        },
-                        mirroring,
-                    }
-                })
-        )
-    );
+        let mirroring = if flags_6.is_bit_set(0) {
+            Mirroring::Vertical
+        } else {
+            Mirroring::Horizontal
+        };
+
+        Ok((
+            i,
+            Self {
+                prg_banks: prg_banks as usize,
+                prg: prg.to_vec(),
+                chr_banks: chr_banks as usize,
+                chr: if chr.is_empty() {
+                    vec![0; CHR_SIZE] // Provide if missing.
+                } else {
+                    chr.to_vec()
+                },
+                mapper_id: assemble_mapper_id(flags_6, flags_7),
+                sram: [0; SRAM_SIZE],
+                size_prg_ram: if size_prg_ram == 0 { 1 } else { size_prg_ram },
+                mirroring,
+            },
+        ))
+    }
 }
 
 fn assemble_mapper_id(flags_6: u8, flags_7: u8) -> u8 {
