@@ -76,7 +76,7 @@ pub struct MutMemory<'a> {
     pub controller2: &'a mut Controller,
 }
 
-impl<'a> MutMemory<'a> {
+impl MutMemory<'_> {
     fn dma_transfer(&mut self, val: u8) {
         let address = u16::from_hilo(val, 0);
 
@@ -87,7 +87,7 @@ impl<'a> MutMemory<'a> {
     }
 }
 
-impl<'a> MutAccess for MutMemory<'a> {
+impl MutAccess for MutMemory<'_> {
     fn mut_read(&mut self, addr: u16) -> u8 {
         let read = match addr {
             0x0000..=0x1FFF => self.ram.read(addr),
@@ -129,7 +129,7 @@ pub struct Memory<'a> {
     pub ppu: &'a Ppu,
 }
 
-impl<'a> Access for Memory<'a> {
+impl Access for Memory<'_> {
     fn read(&self, addr: u16) -> u8 {
         let read = match addr {
             0x0000..=0x1FFF => self.ram.read(addr),
