@@ -281,49 +281,49 @@ fn handle_input(nes: &mut Nes, event_pump: &mut EventPump) -> bool {
             } => {
                 nes.controller_unset(Button::Left);
             }
-            Event::KeyUp {
+            Event::KeyDown {
                 keycode: Some(Keycode::Return),
                 ..
             } => {
                 nes.controller_set(Button::Start);
             }
-            Event::KeyDown {
+            Event::KeyUp {
                 keycode: Some(Keycode::Return),
                 ..
             } => {
                 nes.controller_unset(Button::Start);
             }
-            Event::KeyUp {
+            Event::KeyDown {
                 keycode: Some(Keycode::RShift),
                 ..
             } => {
                 nes.controller_set(Button::Select);
             }
-            Event::KeyDown {
+            Event::KeyUp {
                 keycode: Some(Keycode::RShift),
                 ..
             } => {
                 nes.controller_unset(Button::Select);
             }
-            Event::KeyUp {
+            Event::KeyDown {
                 keycode: Some(Keycode::A),
                 ..
             } => {
                 nes.controller_set(Button::A);
             }
-            Event::KeyDown {
+            Event::KeyUp {
                 keycode: Some(Keycode::A),
                 ..
             } => {
                 nes.controller_unset(Button::A);
             }
-            Event::KeyUp {
+            Event::KeyDown {
                 keycode: Some(Keycode::S),
                 ..
             } => {
                 nes.controller_set(Button::B);
             }
-            Event::KeyDown {
+            Event::KeyUp {
                 keycode: Some(Keycode::S),
                 ..
             } => {
