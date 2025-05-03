@@ -29,11 +29,7 @@ impl Controller {
     }
 
     pub fn read(&mut self) -> u8 {
-        let val = if self.idx < 8 && self.buttons[self.idx] {
-            1
-        } else {
-            0
-        };
+        let val = u8::from(self.idx < 8 && self.buttons[self.idx]);
 
         self.idx = if self.strobe { 0 } else { self.idx + 1 };
 

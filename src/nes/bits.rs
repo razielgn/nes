@@ -11,17 +11,17 @@ pub trait BitOps: Copy + fmt::Binary {
 
     #[allow(dead_code)]
     fn to_bitstring(&self) -> String {
-        format!("{:08b}", self)
+        format!("{self:08b}")
     }
 }
 
 impl BitOps for u8 {
     fn set_bit(&mut self, i: u8) {
-        *self |= 1 << i
+        *self |= 1 << i;
     }
 
     fn clear_bit(&mut self, i: u8) {
-        *self &= !(1 << i)
+        *self &= !(1 << i);
     }
 
     fn get_bit(&self, i: u8) -> u8 {
@@ -41,10 +41,12 @@ impl HighLowBits for u16 {
         Self::from(hi) << 8 | Self::from(lo)
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn high(&self) -> u8 {
         (*self >> 8) as u8
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn low(&self) -> u8 {
         *self as u8
     }

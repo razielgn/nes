@@ -5,7 +5,7 @@ use crate::{
     memory::MutAccess,
     pin::Pin,
 };
-use log::*;
+use log::{debug, trace};
 
 const NMI_VECTOR: u16 = 0xFFFA;
 const RESET_VECTOR: u16 = 0xFFFC;
@@ -239,7 +239,7 @@ impl Cpu {
             CMP => {
                 let addr = self.op_arg;
                 let m = self.read(addr, mem);
-                self.cmp(m)
+                self.cmp(m);
             }
             CPY => {
                 let addr = self.op_arg;
@@ -407,7 +407,7 @@ impl Cpu {
             label => panic!("can't execute op 0x{:02X} {:?}", self.op, label),
         }
 
-        debug!("{:X?}", self);
+        debug!("{self:X?}");
 
         if self.nmi_pin.is_pulled() {
             debug!("handling NMI");
@@ -477,7 +477,7 @@ impl Cpu {
     }
 
     fn sbc(&mut self, m: u8) {
-        let c = if self.p.is_set(CarryFlag) { 0 } else { 1 };
+        let c = u8::from(!self.p.is_set(CarryFlag));
         let (sub, overflow1) = self.a.overflowing_sub(m);
         let (sub, overflow2) = sub.overflowing_sub(c);
         let overflow = overflow1 || overflow2;
@@ -516,7 +516,7 @@ impl Cpu {
             0 // TODO: extract ror_addr
         } else {
             let addr = self.op_arg;
-            let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+            let c = u8::from(self.p.is_set(CarryFlag));
 
             let mut m = self.read(addr, mem);
             self.write(addr, m, mem); // Dummy write
@@ -530,14 +530,14 @@ impl Cpu {
     }
 
     fn ror_acc(&mut self) {
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        let c = u8::from(self.p.is_set(CarryFlag));
         self.p.set_if(CarryFlag, self.a.is_bit_set(0));
         self.a = (self.a >> 1) | (c << 7);
         self.p.set_if_zn(self.a);
     }
 
     fn rol<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        let c = u8::from(self.p.is_set(CarryFlag));
 
         if self.addr_mode == AddressingMode::Accumulator {
             self.p.set_if(CarryFlag, self.a.is_bit_set(7));
@@ -573,7 +573,7 @@ impl Cpu {
     }
 
     fn adc(&mut self, m: u8) {
-        let c = if self.p.is_set(CarryFlag) { 1 } else { 0 };
+        let c = u8::from(self.p.is_set(CarryFlag));
         let (sum, overflow1) = self.a.overflowing_add(m);
         let (sum, overflow2) = sum.overflowing_add(c);
         let overflow = overflow1 || overflow2;
@@ -853,11 +853,11 @@ impl P {
     }
 
     fn set_if_zero(&mut self, val: u8) {
-        self.set_if(Status::ZeroFlag, val == 0)
+        self.set_if(Status::ZeroFlag, val == 0);
     }
 
     fn set_if_negative(&mut self, val: u8) {
-        self.set_if(Status::NegativeFlag, (val as i8) < 0)
+        self.set_if(Status::NegativeFlag, (val as i8) < 0);
     }
 
     fn copy(&mut self, from: Status, to: Status) {
@@ -874,7 +874,7 @@ impl P {
     }
 
     fn unset_if(&mut self, s: Status, v: bool) {
-        self.set_if(s, !v)
+        self.set_if(s, !v);
     }
 
     fn set(&mut self, s: Status) {

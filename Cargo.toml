@@ -2,7 +2,7 @@
 name = "nes"
 version = "0.1.0"
 authors = ["Federico Ravasio <ravasio.federico@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "nes"
@@ -17,7 +17,7 @@ doc = false
 test = false
 
 [dependencies]
-nom = { version = "~7.1", features = ["std"] }
+nom = { version = "~8.0", features = ["std"] }
 log = { version = "~0.4", features = ["release_max_level_info"] }
 simplelog = "~0.12"
 sdl2 = "~0.37"

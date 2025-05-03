@@ -1,5 +1,5 @@
 use crate::{bits::BitOps, memory::MutAccess, pin::Pin, rom::Mirroring};
-use log::*;
+use log::{debug, trace};
 use std::{hint::unreachable_unchecked, mem};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -264,9 +264,7 @@ impl Ppu {
     pub fn step<M: MutAccess>(&mut self, mapper: &mut M) {
         trace!(
             "step cycle {:3}, scanline {:3}, frame {:4?}",
-            self.cycle,
-            self.scanline,
-            self.frame
+            self.cycle, self.scanline, self.frame
         );
 
         self.open_bus.step();
@@ -545,7 +543,7 @@ impl Ppu {
             }
 
             data <<= 4;
-            data |= u32::from(a | p1 | p2)
+            data |= u32::from(a | p1 | p2);
         }
 
         data
@@ -556,7 +554,7 @@ impl Ppu {
             return 0;
         }
 
-        let bit_mux = 0b1000000000000000 >> self.fine_x_scroll;
+        let bit_mux = 0b1000_0000_0000_0000 >> self.fine_x_scroll;
 
         let pixel_lo = u8::from(self.shift_pattern_low & bit_mux > 0);
         let pixel_hi = u8::from(self.shift_pattern_high & bit_mux > 0);
@@ -569,6 +567,7 @@ impl Ppu {
         (palette << 2) | pixel
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn sprite_pixel(&self, x: u16) -> (usize, u8) {
         if !self.mask.show_sprites() {
             return (0, 0);
@@ -638,7 +637,7 @@ impl Ppu {
     }
 
     fn read_color<M: MutAccess>(&self, palette_idx: u8, mapper: &mut M) -> u8 {
-        let addr = 0x3F00 + palette_idx as u16;
+        let addr = 0x3F00 + u16::from(palette_idx);
         self.mem_read(addr, mapper) & 0x3F
     }
 
@@ -702,18 +701,18 @@ impl Ppu {
 
     // $2005
     fn write_to_scroll(&mut self, val: u8) {
-        if !self.write_toggle {
-            // t: ... .... ...H GFED = d: HGFE D...
-            // x:                CBA = d: .... .CBA
-            self.temp_vram_addr &= !0b000_0000_0001_1111;
-            self.temp_vram_addr |= (u16::from(val) & 0b1111_1000) >> 3;
-            self.fine_x_scroll = val & 0b111;
-        } else {
+        if self.write_toggle {
             // t: CBA ..HG FED. .... = d: HGFE DCBA
             self.temp_vram_addr &= !0b111_0011_1110_0000;
             self.temp_vram_addr |= (u16::from(val) & 0b0000_0111) << 12;
             self.temp_vram_addr |= (u16::from(val) & 0b0011_1000) << 2;
             self.temp_vram_addr |= (u16::from(val) & 0b1100_0000) << 2;
+        } else {
+            // t: ... .... ...H GFED = d: HGFE D...
+            // x:                CBA = d: .... .CBA
+            self.temp_vram_addr &= !0b000_0000_0001_1111;
+            self.temp_vram_addr |= (u16::from(val) & 0b1111_1000) >> 3;
+            self.fine_x_scroll = val & 0b111;
         }
 
         self.write_toggle = !self.write_toggle;
@@ -721,18 +720,18 @@ impl Ppu {
 
     // $2006
     fn write_to_addr(&mut self, val: u8) {
-        if !self.write_toggle {
-            // t: .FE DCBA .... .... = d: ..FE DCBA
-            // t: X.. .... .... .... = 0
-            self.temp_vram_addr &= !0b011_1111_0000_0000;
-            self.temp_vram_addr |= (u16::from(val) & 0b11_1111) << 8;
-            self.temp_vram_addr &= !0b100_0000_0000_0000;
-        } else {
+        if self.write_toggle {
             // t: ... .... HGFE DCBA = d: HGFE DCBA
             // v                     = t
             self.temp_vram_addr &= !0b000_0000_1111_1111;
             self.temp_vram_addr |= u16::from(val);
             self.vram_addr.set(self.temp_vram_addr);
+        } else {
+            // t: .FE DCBA .... .... = d: ..FE DCBA
+            // t: X.. .... .... .... = 0
+            self.temp_vram_addr &= !0b011_1111_0000_0000;
+            self.temp_vram_addr |= (u16::from(val) & 0b11_1111) << 8;
+            self.temp_vram_addr &= !0b100_0000_0000_0000;
         }
 
         self.write_toggle = !self.write_toggle;
@@ -805,21 +804,15 @@ impl Ppu {
     }
 
     fn resolve_address(&self, addr: u16) -> usize {
-        use self::Mirroring::*;
+        use self::Mirroring::{Horizontal, Vertical};
 
         let addr = (addr as usize - 0x2000) % 0x1000;
         let table = addr / 0x0400;
         let offset = addr % 0x0400;
 
         let factor = match (self.mirroring, table) {
-            (Horizontal, 0) => 0,
-            (Horizontal, 1) => 0,
-            (Horizontal, 2) => 1,
-            (Horizontal, 3) => 1,
-            (Vertical, 0) => 0,
-            (Vertical, 1) => 1,
-            (Vertical, 2) => 0,
-            (Vertical, 3) => 1,
+            (Horizontal, 0 | 1) | (Vertical, 0 | 2) => 0,
+            (Horizontal, 2 | 3) | (Vertical, 1 | 3) => 1,
             _ => unreachable!(),
         };
 
@@ -925,7 +918,7 @@ impl VRamAddr {
     }
 
     pub fn set(&mut self, val: u16) {
-        trace!("vram set to {:04x}", val);
+        trace!("vram set to {val:04x}");
 
         self.0 = val;
     }
@@ -958,29 +951,30 @@ impl VRamAddr {
         if self.0 & 0x7000 != 0x7000 {
             // increment fine Y
             self.increment(0x1000);
-        } else {
-            // fine Y = 0
-            self.0 &= 0x8FFF;
-
-            // let y = coarse Y
-            let mut y = (self.0 & 0x03E0) >> 5;
-            if y == 29 {
-                // coarse Y = 0
-                y = 0;
-
-                // switch vertical nametable
-                self.0 ^= 0x0800;
-            } else if y == 31 {
-                // coarse Y = 0, nametable not switched
-                y = 0
-            } else {
-                // increment coarse Y
-                y = y.wrapping_add(1);
-            }
-
-            // put coarse Y back into v
-            self.0 = (self.0 & 0xFC1F) | (y << 5);
+            return;
         }
+
+        // fine Y = 0
+        self.0 &= 0x8FFF;
+
+        // let y = coarse Y
+        let mut y = (self.0 & 0x03E0) >> 5;
+        if y == 29 {
+            // coarse Y = 0
+            y = 0;
+
+            // switch vertical nametable
+            self.0 ^= 0x0800;
+        } else if y == 31 {
+            // coarse Y = 0, nametable not switched
+            y = 0;
+        } else {
+            // increment coarse Y
+            y = y.wrapping_add(1);
+        }
+
+        // put coarse Y back into v
+        self.0 = (self.0 & 0xFC1F) | (y << 5);
     }
 
     pub fn nametable_addr(self) -> u16 {
@@ -991,9 +985,9 @@ impl VRamAddr {
     pub fn attribute_addr(self) -> u16 {
         // https://wiki.nesdev.com/w/index.php/PPU_scrolling#Tile_and_attribute_fetching
         0x23C0
-            | (self.0 & 0b110000000000) // nametable x & y
-            | ((self.coarse_y() as u16 >> 2) << 3)
-            | (self.coarse_x() as u16 >> 2)
+            | (self.0 & 0b1100_0000_0000) // nametable x & y
+            | ((u16::from(self.coarse_y()) >> 2) << 3)
+            | (u16::from(self.coarse_x()) >> 2)
     }
 
     fn coarse_y(self) -> u8 {
@@ -1048,7 +1042,7 @@ impl Status {
     }
 
     pub fn clear_vblank(&mut self) {
-        self.0.clear_bit(7)
+        self.0.clear_bit(7);
     }
 }
 
@@ -1061,37 +1055,21 @@ impl Control {
     }
 
     pub fn vram_addr_incr(self) -> u16 {
-        if self.0.is_bit_set(2) {
-            32
-        } else {
-            1
-        }
+        if self.0.is_bit_set(2) { 32 } else { 1 }
     }
 
     #[allow(dead_code)]
     pub fn sprite_pattern_table_addr(self) -> u16 {
-        if self.0.is_bit_set(3) {
-            0x1000
-        } else {
-            0x0000
-        }
+        if self.0.is_bit_set(3) { 0x1000 } else { 0x0000 }
     }
 
     pub fn background_pattern_table_addr(self) -> u16 {
-        if self.0.is_bit_set(4) {
-            0x1000
-        } else {
-            0x0000
-        }
+        if self.0.is_bit_set(4) { 0x1000 } else { 0x0000 }
     }
 
     #[allow(dead_code)]
     pub fn sprite_height(self) -> u16 {
-        if self.0.is_bit_set(5) {
-            16
-        } else {
-            8
-        }
+        if self.0.is_bit_set(5) { 16 } else { 8 }
     }
 
     pub fn nmi_at_next_vblank(self) -> bool {

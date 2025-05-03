@@ -1,8 +1,8 @@
 use crate::bits::BitOps;
 use nom::{
+    IResult,
     bytes::complete::{tag, take},
     number::complete::u8,
-    IResult,
 };
 use std::{fs, path::Path};
 
@@ -29,18 +29,20 @@ pub struct Rom {
 }
 
 impl Rom {
+    #[must_use]
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let buf = fs::read(path).expect("failed to read rom file");
         Self::from_buf(&buf)
     }
 
+    #[must_use]
     pub fn from_buf(buf: &[u8]) -> Self {
         let (_, rom) = Self::parse(buf).expect("failed to parse rom"); // TODO: error handling
         rom
     }
 
     fn parse(i: &[u8]) -> IResult<&[u8], Self> {
-        let (i, _) = tag(b"NES\x1A")(i)?;
+        let (i, _) = tag("NES\x1A")(i)?;
         let (i, prg_banks) = u8(i)?;
         let (i, chr_banks) = u8(i)?;
         let (i, flags_6) = u8(i)?;

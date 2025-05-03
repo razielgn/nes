@@ -1,6 +1,6 @@
 use crate::{
-    bits::HighLowBits, instruction::AddressingMode::*, instruction::Label::*,
-    memory::Access, Nes,
+    Nes, bits::HighLowBits, instruction::AddressingMode::*,
+    instruction::Label::*, memory::Access,
 };
 use std::fmt::{self, Display, Formatter};
 
@@ -27,67 +27,59 @@ impl Display for DebugState {
         let bytecode = match mode {
             Absolute | AbsoluteX(..) | AbsoluteY(..) | Indirect => {
                 let (hi, lo) = args.split();
-                format!("{:02X} {:02X}", lo, hi)
+                format!("{lo:02X} {hi:02X}")
             }
             ZeroPage | Relative | Immediate | ZeroPageX | ZeroPageY
             | IndexedIndirect | IndirectIndexed(..) => {
                 format!("{:02X}", args.low())
             }
-            None | Implied | Accumulator => "".into(),
+            None | Implied | Accumulator => String::new(),
         };
 
         let mode = match mode {
             Absolute => match label {
-                JMP | JSR => format!("${:04X}", read_addr),
-                _ => format!("${:04X} = {:02X}", read_addr, read_val),
+                JMP | JSR => format!("${read_addr:04X}"),
+                _ => format!("${read_addr:04X} = {read_val:02X}"),
             },
             AbsoluteX(..) | AbsoluteY(..) => {
                 let reg = if let AbsoluteX(..) = mode { "X" } else { "Y" };
-                format!(
-                    "${:04X},{} @ {:04X} = {:02X}",
-                    args, reg, read_addr, read_val
-                )
+                format!("${args:04X},{reg} @ {read_addr:04X} = {read_val:02X}")
             }
             Accumulator => "A".into(),
-            Indirect => format!("(${:04X}) = {:04X}", args, read_addr),
-            Immediate => format!("#${:02X}", read_val),
-            ZeroPage => format!("${:02X} = {:02X}", read_addr, read_val),
+            Indirect => format!("(${args:04X}) = {read_addr:04X}"),
+            Immediate => format!("#${read_val:02X}"),
+            ZeroPage => format!("${read_addr:02X} = {read_val:02X}"),
             ZeroPageX => format!(
-                "${:02X},X @ {:02X} = {:02X}",
+                "${:02X},X @ {:02X} = {read_val:02X}",
                 args.low(),
                 args.low().wrapping_add(prev_cpu.x),
-                read_val
             ),
             ZeroPageY => format!(
-                "${:02X},Y @ {:02X} = {:02X}",
+                "${:02X},Y @ {:02X} = {read_val:02X}",
                 args.low(),
                 args.low().wrapping_add(prev_cpu.y),
-                read_val
             ),
             IndexedIndirect => format!(
-                "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
+                "(${:02X},X) @ {:02X} = {read_addr:04X} = {read_val:02X}",
                 args.low(),
                 args.low().wrapping_add(prev_cpu.x),
-                read_addr,
-                read_val
             ),
             IndirectIndexed(..) => format!(
-                "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
+                "(${:02X}),Y = {:04X} @ {read_addr:04X} = {read_val:02X}",
                 args.low(),
                 read_addr.wrapping_sub(u16::from(prev_cpu.y)),
-                read_addr,
-                read_val
             ),
             Relative => {
                 let mut addr =
                     pc.wrapping_add(2).wrapping_add(u16::from(read_val));
+
                 if read_val >= 0x80 {
                     addr = addr.wrapping_sub(0x100);
                 }
 
-                format!("${:04X}", addr)
+                format!("${addr:04X}")
             }
-            None | Implied => "".into(),
+            None | Implied => String::new(),
         };
 
         let p: u8 = prev_cpu.p.into();
@@ -98,13 +90,9 @@ impl Display for DebugState {
              Y:{y:02X} P:{p:02X} SP:{sp:2X} CYC:{cyc:3?}",
             pc = prev_cpu.pc,
             op = curr_cpu.op,
-            label = label,
-            bytecode = bytecode,
-            mode = mode,
             a = prev_cpu.a,
             x = prev_cpu.x,
             y = prev_cpu.y,
-            p = p,
             sp = prev_cpu.sp,
             cyc = (prev_cpu.cycles * 3) % 341,
         )

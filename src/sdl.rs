@@ -1,10 +1,10 @@
 use nes::{Button, Nes};
 use sdl2::{
+    EventPump,
     event::Event,
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
-    EventPump,
 };
 use std::time::Instant;
 

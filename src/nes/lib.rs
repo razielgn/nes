@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc, clippy::enum_glob_use)]
+
 #[cfg(test)]
 extern crate pretty_assertions;
 
@@ -17,7 +19,7 @@ pub use controller::Button;
 use controller::Controller;
 pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
-use log::*;
+use log::{debug, info, trace};
 use mapper::Mapper;
 pub use memory::{Access, Memory, MutMemory, Ram};
 use pin::Pin;
@@ -51,15 +53,18 @@ macro_rules! mut_memory {
 }
 
 impl Nes {
+    #[must_use]
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let rom = Rom::from_path(path);
         Self::from_rom(rom)
     }
 
+    #[must_use]
     pub fn from_buf(buf: &[u8]) -> Self {
         Self::from_rom(Rom::from_buf(buf))
     }
 
+    #[must_use]
     pub fn from_rom(rom: Rom) -> Self {
         info!("Mapper ID: {:03}", rom.mapper_id);
         info!("Mirroring: {:?}", rom.mirroring);
@@ -118,13 +123,13 @@ impl Nes {
     }
 
     pub fn controller_set(&mut self, button: Button) {
-        trace!("set button: {:?}", button);
+        trace!("set button: {button:?}");
         self.controller1.set_button(button);
         self.controller2.set_button(button);
     }
 
     pub fn controller_unset(&mut self, button: Button) {
-        trace!("unset button: {:?}", button);
+        trace!("unset button: {button:?}");
         self.controller1.unset_button(button);
         self.controller2.unset_button(button);
     }
@@ -134,7 +139,7 @@ impl Nes {
 
         let mut cur = Cursor::new(buf);
 
-        for color_idx in self.ppu.screen().iter() {
+        for color_idx in self.ppu.screen() {
             let color = ppu::COLORS[*color_idx as usize % 64];
             cur.write_all(&color.to_be_bytes()[1..])?;
         }
@@ -148,7 +153,7 @@ impl Nes {
         let palette = self.ppu.palette();
 
         let mut cur = Cursor::new(buf);
-        for color_idx in palette.iter() {
+        for color_idx in palette {
             let color = ppu::COLORS[*color_idx as usize % 64];
             cur.write_all(&color.to_be_bytes()[1..])?;
         }
@@ -198,13 +203,14 @@ impl Nes {
 
     pub fn reset(&mut self) {
         let mut mem = mut_memory!(self);
-        self.cpu.reset(&mut mem)
+        self.cpu.reset(&mut mem);
     }
 
     pub fn set_pc(&mut self, pc: u16) {
         self.cpu.jump(pc);
     }
 
+    #[must_use]
     pub fn memory(&self) -> Memory {
         Memory {
             ram: &self.ram,

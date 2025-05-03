@@ -37,7 +37,7 @@
           filter = path: type:
             (lib.hasSuffix "Cargo.toml" path)
             || (lib.hasSuffix "Cargo.lock" path)
-            || (lib.hasSuffix ".rustfmt.toml" path)
+            || (lib.hasSuffix "rustfmt.toml" path)
             || (
               ((lib.hasInfix "/src" path) || (lib.hasInfix "/tests" path) || (lib.hasInfix "/benches" path))
               && (

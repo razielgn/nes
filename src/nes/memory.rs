@@ -1,7 +1,7 @@
 use crate::{
     bits::HighLowBits, controller::Controller, mapper::Mapper, ppu::Ppu,
 };
-use log::*;
+use log::debug;
 
 pub trait MutAccess {
     fn mut_read(&mut self, addr: u16) -> u8;
@@ -59,6 +59,7 @@ impl Default for Ram {
 }
 
 impl Ram {
+    #[must_use]
     pub fn read(&self, addr: u16) -> u8 {
         self.0[(addr % 0x0800) as usize]
     }
@@ -100,7 +101,7 @@ impl MutAccess for MutMemory<'_> {
             0x6000..=0xFFFF => self.mapper.mut_read(addr),
         };
 
-        debug!("read {:04x} => {:02x}", addr, read);
+        debug!("read {addr:04x} => {read:02x}");
 
         read
     }
@@ -138,7 +139,7 @@ impl Access for Memory<'_> {
             0x4020..=0xFFFF => self.mapper.read(addr),
         };
 
-        debug!("read {:04x} => {:02x}", addr, read);
+        debug!("read {addr:04x} => {read:02x}");
 
         read
     }

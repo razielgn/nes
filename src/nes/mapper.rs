@@ -33,7 +33,7 @@ impl Access for Mapper {
                 if let Some(val) = self.rom.chr.get(addr) {
                     *val
                 } else {
-                    panic!("out of bound CHR read at ${:04x}", addr);
+                    panic!("out of bound CHR read at ${addr:04x}");
                 }
             }
             0x6000..=0x7FFF => self.rom.sram[addr - 0x6000],
@@ -60,7 +60,7 @@ impl MutAccess for Mapper {
 
         match addr {
             0x4020..=0x5FFF => {
-                panic!("illegal write at {:04X} of {:02X}", addr, addr);
+                panic!("illegal write at {addr:04X} of {addr:02X}");
             }
             0x6000..=0x7FFF => self.rom.sram[addr - 0x6000] = val,
             0x8000..=0xFFFF => self.bank1 = val as usize % self.banks,
