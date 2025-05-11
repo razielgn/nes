@@ -48,7 +48,7 @@
             );
         };
 
-        buildInputs = with pkgs; [SDL2];
+        buildInputs = with pkgs; [SDL2 SDL2_gfx];
       };
 
       cargoArtifacts = craneLib.buildDepsOnly commonArgs;

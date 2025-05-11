@@ -2,6 +2,7 @@ use nes::{Button, Nes};
 use sdl2::{
     EventPump,
     event::Event,
+    gfx::framerate::FPSManager,
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
@@ -43,21 +44,22 @@ fn run_normal(mut nes: Nes, scale: u32) {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut t1 = Instant::now();
-    let mut frame_counter = 0usize;
+    let mut fps_manager = FPSManager::new();
+    fps_manager.set_framerate(60).expect("failed to set fps");
 
     loop {
         nes.step();
 
         if nes.ppu_frame_ready_latch() {
-            frame_counter += 1;
-
-            if frame_counter % 10 == 0 {
+            if fps_manager.get_frame_count() % 30 == 0 {
                 let frame_elapsed = t1.elapsed();
+
                 canvas
                     .window_mut()
                     .set_title(&format!(
-                        "NES (frame {:.1}ms)",
-                        frame_elapsed.as_secs_f32() * 1000.0
+                        "NES (frame {:1}ms, FPS {})",
+                        frame_elapsed.as_secs_f32() * 1000.0,
+                        fps_manager.get_framerate()
                     ))
                     .expect("failed to set window title");
             }
@@ -72,6 +74,8 @@ fn run_normal(mut nes: Nes, scale: u32) {
                 })
                 .expect("failed to update screen texture");
 
+            t1 = Instant::now();
+
             canvas.clear();
             canvas.set_draw_color(Color::RGB(30, 30, 30));
 
@@ -81,7 +85,7 @@ fn run_normal(mut nes: Nes, scale: u32) {
 
             canvas.present();
 
-            t1 = Instant::now();
+            fps_manager.delay();
         }
     }
 }
@@ -150,21 +154,22 @@ fn run_debug(mut nes: Nes, scale: u32) {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut t1 = Instant::now();
-    let mut frame_counter = 0usize;
+    let mut fps_manager = FPSManager::new();
+    fps_manager.set_framerate(60).expect("failed to set fps");
 
     loop {
         nes.step();
 
         if nes.ppu_frame_ready_latch() {
-            frame_counter += 1;
-
-            if frame_counter % 10 == 0 {
+            if fps_manager.get_frame_count() % 30 == 0 {
                 let frame_elapsed = t1.elapsed();
+
                 canvas
                     .window_mut()
                     .set_title(&format!(
-                        "NES (frame {:.1}ms)",
-                        frame_elapsed.as_secs_f32() * 1000.0
+                        "NES (frame {:1}ms, FPS {})",
+                        frame_elapsed.as_secs_f32() * 1000.0,
+                        fps_manager.get_framerate()
                     ))
                     .expect("failed to set window title");
             }
@@ -197,6 +202,8 @@ fn run_debug(mut nes: Nes, scale: u32) {
                 })
                 .expect("failed to update palette texture");
 
+            t1 = Instant::now();
+
             canvas.clear();
             canvas.set_draw_color(Color::RGB(30, 30, 30));
 
@@ -218,7 +225,7 @@ fn run_debug(mut nes: Nes, scale: u32) {
 
             canvas.present();
 
-            t1 = Instant::now();
+            fps_manager.delay();
         }
     }
 }
