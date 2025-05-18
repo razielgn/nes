@@ -82,7 +82,7 @@ impl Display for DebugState {
             None | Implied => String::new(),
         };
 
-        let p: u8 = prev_cpu.p.into();
+        let p: u8 = prev_cpu.p.bits();
 
         write!(
             f,

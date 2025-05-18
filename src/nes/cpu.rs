@@ -1,10 +1,10 @@
-use self::Status::*;
 use crate::{
     bits::{BitOps, HighLowBits},
     instruction::{AddressingMode, Label, Label::*},
     memory::MutAccess,
     pin::Pin,
 };
+use bitflags::bitflags;
 use log::{debug, trace};
 
 const NMI_VECTOR: u16 = 0xFFFA;
@@ -18,7 +18,7 @@ pub struct Cpu {
     pub cycles: Cycles,
     pub pc: u16,
     pub sp: u8,
-    pub p: P,
+    pub p: Status,
     pub a: u8,
     pub x: u8,
     pub y: u8,
@@ -42,7 +42,7 @@ impl Cpu {
             cycles: 0,
             pc,
             sp: 0xFD,
-            p: P::new(),
+            p: Status::new(),
             a: 0,
             x: 0,
             y: 0,
@@ -63,7 +63,7 @@ impl Cpu {
         self.push_double(pc, mem);
         self.php(mem);
         self.pc = self.read_word(addr, mem);
-        self.p.set(InterruptDisable);
+        self.p.insert(Status::INTERRUPT_DISABLE);
         self.cycles += 7;
     }
 
@@ -71,7 +71,7 @@ impl Cpu {
         self.nmi_pin.clear();
 
         self.pc = self.read_word(RESET_VECTOR, mem);
-        self.p.set(InterruptDisable);
+        self.p.insert(Status::INTERRUPT_DISABLE);
         self.sp = self.sp.wrapping_sub(3);
 
         self.cycles = 0;
@@ -110,8 +110,7 @@ impl Cpu {
             }
             PHP => self.php(mem),
             PHA => {
-                let a = self.a;
-                self.push(a, mem);
+                self.push(self.a, mem);
             }
             PLA => {
                 self.dummy_read(mem);
@@ -165,51 +164,51 @@ impl Cpu {
             }
             NOP => self.nop(mem),
             SEC => {
-                self.p.set(CarryFlag);
+                self.p.insert(Status::CARRY);
             }
             SEI => self.sei(),
             SED => {
-                self.p.set(DecimalMode);
+                self.p.insert(Status::DECIMAL);
             }
             CLC => {
-                self.p.unset(CarryFlag);
+                self.p.remove(Status::CARRY);
             }
             CLD => {
-                self.p.unset(DecimalMode);
+                self.p.remove(Status::DECIMAL);
             }
             CLV => {
-                self.p.unset(OverflowFlag);
+                self.p.remove(Status::OVERFLOW);
             }
             BCS => {
-                let branch = self.p.is_set(CarryFlag);
+                let branch = self.p.contains(Status::CARRY);
                 self.branch_relative(mem, branch);
             }
             BCC => {
-                let branch = !self.p.is_set(CarryFlag);
+                let branch = !self.p.contains(Status::CARRY);
                 self.branch_relative(mem, branch);
             }
             BEQ => {
-                let branch = self.p.is_set(ZeroFlag);
+                let branch = self.p.contains(Status::ZERO);
                 self.branch_relative(mem, branch);
             }
             BNE => {
-                let branch = !self.p.is_set(ZeroFlag);
+                let branch = !self.p.contains(Status::ZERO);
                 self.branch_relative(mem, branch);
             }
             BVS => {
-                let branch = self.p.is_set(OverflowFlag);
+                let branch = self.p.contains(Status::OVERFLOW);
                 self.branch_relative(mem, branch);
             }
             BVC => {
-                let branch = !self.p.is_set(OverflowFlag);
+                let branch = !self.p.contains(Status::OVERFLOW);
                 self.branch_relative(mem, branch);
             }
             BMI => {
-                let branch = self.p.is_set(NegativeFlag);
+                let branch = self.p.contains(Status::NEGATIVE);
                 self.branch_relative(mem, branch);
             }
             BPL => {
-                let branch = !self.p.is_set(NegativeFlag);
+                let branch = !self.p.contains(Status::NEGATIVE);
                 self.branch_relative(mem, branch);
             }
             BIT => {
@@ -219,7 +218,7 @@ impl Cpu {
 
                 self.p.set_if_zero(res);
                 self.p.set_if_negative(m);
-                self.p.set_if(OverflowFlag, (m >> 6) & 1 == 1);
+                self.p.set(Status::OVERFLOW, (m >> 6) & 1 == 1);
             }
             AND => {
                 let addr = self.op_arg;
@@ -245,14 +244,14 @@ impl Cpu {
                 let addr = self.op_arg;
                 let m = self.read(addr, mem);
                 let n = self.y.wrapping_sub(m);
-                self.p.set_if(CarryFlag, self.y >= m);
+                self.p.set(Status::CARRY, self.y >= m);
                 self.p.set_if_zn(n);
             }
             CPX => {
                 let addr = self.op_arg;
                 let m = self.read(addr, mem);
                 let n = self.x.wrapping_sub(m);
-                self.p.set_if(CarryFlag, self.x >= m);
+                self.p.set(Status::CARRY, self.x >= m);
                 self.p.set_if_zn(n);
             }
             ADC => {
@@ -344,22 +343,24 @@ impl Cpu {
                 self.eor(m);
             }
             CLI => {
-                self.p.unset(InterruptDisable);
+                self.p.remove(Status::INTERRUPT_DISABLE);
             }
             ANC => {
                 let addr = self.op_arg;
                 let m = self.read(addr, mem);
+
                 self.and(m);
-                self.p.copy(NegativeFlag, CarryFlag);
+
+                self.p.set(Status::CARRY, self.p.contains(Status::NEGATIVE));
             }
             ALR => {
                 let addr = self.op_arg;
                 self.a &= self.read(addr, mem);
-                self.p.set_if(CarryFlag, self.a.is_bit_set(0));
+                self.p.set(Status::CARRY, self.a.is_bit_set(0));
 
                 self.a >>= 1;
                 self.p.set_if_zero(self.a);
-                self.p.unset(NegativeFlag);
+                self.p.remove(Status::NEGATIVE);
             }
             ARR => {
                 let addr = self.op_arg;
@@ -368,17 +369,16 @@ impl Cpu {
                 self.ror_acc();
 
                 let c = self.a.get_bit(6);
-                self.p.set_if(CarryFlag, c == 1);
-                self.p.set_if(OverflowFlag, (c ^ self.a.get_bit(5)) == 1);
+                self.p.set(Status::CARRY, c == 1);
+                self.p.set(Status::OVERFLOW, (c ^ self.a.get_bit(5)) == 1);
             }
             AXS => {
                 let addr = self.op_arg;
                 let m = self.read(addr, mem);
                 let n = (self.a & self.x).wrapping_sub(m);
 
-                self.p.set_if(CarryFlag, (self.a & self.x) >= m);
-                self.p.set_if(NegativeFlag, (n as i8) < 0);
-                self.p.set_if_zero(n);
+                self.p.set(Status::CARRY, (self.a & self.x) >= m);
+                self.p.set_if_zn(n);
                 self.x = n;
             }
             SHY => {
@@ -433,14 +433,12 @@ impl Cpu {
     }
 
     fn php<M: MutAccess>(&mut self, mem: &mut M) {
-        let mut p = self.p;
-        p.set(BreakCommand);
-
-        self.push(p.into(), mem);
+        let p = self.p | Status::BREAK | Status::UNUSED;
+        self.push(p.bits(), mem);
     }
 
     fn sei(&mut self) {
-        self.p.set(InterruptDisable);
+        self.p.insert(Status::INTERRUPT_DISABLE);
     }
 
     fn inc<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
@@ -471,20 +469,19 @@ impl Cpu {
     fn cmp(&mut self, m: u8) {
         let n = self.a.wrapping_sub(m);
 
-        self.p.set_if(CarryFlag, self.a >= m);
-        self.p.set_if(NegativeFlag, (n as i8) < 0);
-        self.p.set_if_zero(n);
+        self.p.set(Status::CARRY, self.a >= m);
+        self.p.set_if_zn(n);
     }
 
     fn sbc(&mut self, m: u8) {
-        let c = u8::from(!self.p.is_set(CarryFlag));
+        let c = u8::from(!self.p.contains(Status::CARRY));
         let (sub, overflow1) = self.a.overflowing_sub(m);
         let (sub, overflow2) = sub.overflowing_sub(c);
         let overflow = overflow1 || overflow2;
 
-        self.p.unset_if(CarryFlag, overflow);
-        self.p.set_if(
-            OverflowFlag,
+        self.p.set(Status::CARRY, !overflow);
+        self.p.set(
+            Status::OVERFLOW,
             (self.a ^ sub) & 0x80 != 0 && (self.a ^ m) & 0x80 != 0,
         );
         self.p.set_if_zn(sub);
@@ -494,7 +491,7 @@ impl Cpu {
 
     fn asl<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         if self.addr_mode == AddressingMode::Accumulator {
-            self.p.set_if(CarryFlag, self.a.is_bit_set(7));
+            self.p.set(Status::CARRY, self.a.is_bit_set(7));
             self.a <<= 1;
             self.p.set_if_zn(self.a);
             self.a
@@ -502,7 +499,7 @@ impl Cpu {
             let addr = self.op_arg;
             let mut m = self.read(addr, mem);
             self.write(addr, m, mem); // Dummy write
-            self.p.set_if(CarryFlag, m.is_bit_set(7));
+            self.p.set(Status::CARRY, m.is_bit_set(7));
             m <<= 1;
             self.p.set_if_zn(m);
             self.write(addr, m, mem);
@@ -516,12 +513,12 @@ impl Cpu {
             0 // TODO: extract ror_addr
         } else {
             let addr = self.op_arg;
-            let c = u8::from(self.p.is_set(CarryFlag));
+            let c = u8::from(self.p.contains(Status::CARRY));
 
             let mut m = self.read(addr, mem);
             self.write(addr, m, mem); // Dummy write
 
-            self.p.set_if(CarryFlag, m.is_bit_set(0));
+            self.p.set(Status::CARRY, m.is_bit_set(0));
             m = (m >> 1) | (c << 7);
             self.p.set_if_zn(m);
             self.write(addr, m, mem);
@@ -530,17 +527,17 @@ impl Cpu {
     }
 
     fn ror_acc(&mut self) {
-        let c = u8::from(self.p.is_set(CarryFlag));
-        self.p.set_if(CarryFlag, self.a.is_bit_set(0));
+        let c = u8::from(self.p.contains(Status::CARRY));
+        self.p.set(Status::CARRY, self.a.is_bit_set(0));
         self.a = (self.a >> 1) | (c << 7);
         self.p.set_if_zn(self.a);
     }
 
     fn rol<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
-        let c = u8::from(self.p.is_set(CarryFlag));
+        let c = u8::from(self.p.contains(Status::CARRY));
 
         if self.addr_mode == AddressingMode::Accumulator {
-            self.p.set_if(CarryFlag, self.a.is_bit_set(7));
+            self.p.set(Status::CARRY, self.a.is_bit_set(7));
             self.a = (self.a << 1) | c;
             self.p.set_if_zn(self.a);
             self.a
@@ -549,7 +546,7 @@ impl Cpu {
             let mut m = self.read(addr, mem);
             self.write(addr, m, mem); // Dummy write
 
-            self.p.set_if(CarryFlag, m.is_bit_set(7));
+            self.p.set(Status::CARRY, m.is_bit_set(7));
             m = (m << 1) | c;
             self.p.set_if_zn(m);
             self.write(addr, m, mem);
@@ -573,14 +570,14 @@ impl Cpu {
     }
 
     fn adc(&mut self, m: u8) {
-        let c = u8::from(self.p.is_set(CarryFlag));
+        let c = u8::from(self.p.contains(Status::CARRY));
         let (sum, overflow1) = self.a.overflowing_add(m);
         let (sum, overflow2) = sum.overflowing_add(c);
         let overflow = overflow1 || overflow2;
 
-        self.p.set_if(CarryFlag, overflow);
-        self.p.set_if(
-            OverflowFlag,
+        self.p.set(Status::CARRY, overflow);
+        self.p.set(
+            Status::OVERFLOW,
             (self.a ^ sum) & 0x80 != 0 && (self.a ^ m) & 0x80 == 0,
         );
         self.p.set_if_zn(sum);
@@ -592,14 +589,14 @@ impl Cpu {
         let addr = self.op_arg;
 
         if self.addr_mode == AddressingMode::Accumulator {
-            self.p.set_if(CarryFlag, self.a.is_bit_set(0));
+            self.p.set(Status::CARRY, self.a.is_bit_set(0));
             self.a >>= 1;
             self.p.set_if_zn(self.a);
             self.a
         } else {
             let mut m = self.read(addr, mem);
             self.write(addr, m, mem); // Dummy write
-            self.p.set_if(CarryFlag, m.is_bit_set(0));
+            self.p.set(Status::CARRY, m.is_bit_set(0));
             m >>= 1;
             self.p.set_if_zn(m);
             self.write(addr, m, mem);
@@ -662,8 +659,8 @@ impl Cpu {
     }
 
     fn write<M: MutAccess>(&mut self, addr: u16, val: u8, mem: &mut M) {
-        self.inc_cycles();
         mem.write(addr, val);
+        self.inc_cycles();
     }
 
     fn inc_cycles(&mut self) {
@@ -794,9 +791,12 @@ impl Cpu {
         };
     }
 
+    fn sp_addr(&self) -> u16 {
+        0x100_u16.wrapping_add(u16::from(self.sp))
+    }
+
     fn push<M: MutAccess>(&mut self, val: u8, mem: &mut M) {
-        let addr = 0x100_u16.wrapping_add(u16::from(self.sp));
-        self.write(addr, val, mem);
+        self.write(self.sp_addr(), val, mem);
         self.sp = self.sp.wrapping_sub(1);
     }
 
@@ -807,8 +807,7 @@ impl Cpu {
 
     fn pop<M: MutAccess>(&mut self, mem: &mut M) -> u8 {
         self.sp = self.sp.wrapping_add(1);
-        let addr = 0x100_u16.wrapping_add(u16::from(self.sp));
-        self.read(addr, mem)
+        self.read(self.sp_addr(), mem)
     }
 
     fn pop_double<M: MutAccess>(&mut self, mem: &mut M) -> u16 {
@@ -818,9 +817,9 @@ impl Cpu {
     }
 
     fn pop_p<M: MutAccess>(&mut self, mem: &mut M) {
-        self.p = self.pop(mem).into();
-        self.p.unset(Status::BreakCommand);
-        self.p.set(Status::UnusedFlag);
+        self.p = Status::from_bits_truncate(self.pop(mem));
+        self.p.remove(Status::BREAK);
+        self.p.insert(Status::UNUSED);
     }
 }
 
@@ -828,23 +827,25 @@ fn is_page_crossed(a: u16, b: u16) -> bool {
     a.wrapping_add(b) & 0xFF00 != a & 0xFF00
 }
 
-enum Status {
-    CarryFlag = 0,
-    ZeroFlag = 1,
-    InterruptDisable = 2,
-    DecimalMode = 3,
-    BreakCommand = 4,
-    UnusedFlag = 5,
-    OverflowFlag = 6,
-    NegativeFlag = 7,
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Status: u8 {
+        const CARRY = 1 << 0;
+        const ZERO = 1 << 1;
+        const INTERRUPT_DISABLE = 1 << 2;
+        const DECIMAL = 1 << 3;
+        const BREAK = 1 << 4;
+        const UNUSED = 1 << 5;
+        const OVERFLOW = 1 << 6;
+        const NEGATIVE = 1 << 7;
+
+        const RESET = Self::INTERRUPT_DISABLE.bits() | Self::UNUSED.bits();
+    }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct P(u8);
-
-impl P {
-    fn new() -> Self {
-        P(0x24)
+impl Status {
+    const fn new() -> Self {
+        Self::RESET
     }
 
     fn set_if_zn(&mut self, val: u8) {
@@ -853,71 +854,56 @@ impl P {
     }
 
     fn set_if_zero(&mut self, val: u8) {
-        self.set_if(Status::ZeroFlag, val == 0);
+        self.set(Self::ZERO, val == 0);
     }
 
     fn set_if_negative(&mut self, val: u8) {
-        self.set_if(Status::NegativeFlag, (val as i8) < 0);
-    }
-
-    fn copy(&mut self, from: Status, to: Status) {
-        let set = self.is_set(from);
-        self.set_if(to, set);
-    }
-
-    fn set_if(&mut self, s: Status, v: bool) {
-        if v {
-            self.set(s);
-        } else {
-            self.unset(s);
-        }
-    }
-
-    fn unset_if(&mut self, s: Status, v: bool) {
-        self.set_if(s, !v);
-    }
-
-    fn set(&mut self, s: Status) {
-        self.0.set_bit(s as u8);
-    }
-
-    fn unset(&mut self, s: Status) {
-        self.0.clear_bit(s as u8);
-    }
-
-    fn is_set(self, s: Status) -> bool {
-        self.0.is_bit_set(s as u8)
+        self.set(Self::NEGATIVE, (val as i8) < 0);
     }
 }
 
-impl From<u8> for P {
-    fn from(p: u8) -> Self {
-        P(p)
-    }
-}
+// #[derive(Debug, PartialEq, Clone, Copy)]
+// pub struct P(u8);
 
-impl From<P> for u8 {
-    fn from(p: P) -> Self {
-        p.0
-    }
-}
+// impl P {
+//     fn new() -> Self {
+//         P(0x24)
+//     }
+
+//     fn unset_if(&mut self, s: Status, v: bool) {
+//         self.set_if(s, !v);
+//     }
+
+//     fn set(&mut self, s: Status) {
+//         self.0.set_bit(s as u8);
+//     }
+
+//     fn unset(&mut self, s: Status) {
+//         self.0.clear_bit(s as u8);
+//     }
+
+//     fn is_set(self, s: Status) -> bool {
+//         self.0.is_bit_set(s as u8)
+//     }
+// }
+
+// impl From<u8> for P {
+//     fn from(p: u8) -> Self {
+//         P(p)
+//     }
+// }
+
+// impl From<P> for u8 {
+//     fn from(p: P) -> Self {
+//         p.0
+//     }
+// }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::instruction::AddressingMode::*;
     use pretty_assertions::assert_eq;
-
-    #[test]
-    fn bit_ops_on_p() {
-        let mut p = P::new();
-
-        p.set(CarryFlag);
-        assert!(p.is_set(CarryFlag));
-
-        p.unset(CarryFlag);
-        assert!(!p.is_set(CarryFlag));
-    }
 
     #[test]
     fn nop_implied() {
@@ -959,7 +945,7 @@ mod test {
         assert_eq!(2, cpu.pc);
         assert_eq!(2, cpu.cycles);
         assert_eq!(0xEF, cpu.a);
-        assert!(cpu.p.is_set(NegativeFlag));
+        assert!(cpu.p.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1145,7 +1131,7 @@ mod test {
     fn bpl_relative_not_branch() {
         let mut cpu = Cpu::with_pc(0);
         let mut m = vec![0x10, 0x02, 0x00, 0x00];
-        cpu.p.set(NegativeFlag);
+        cpu.p.insert(Status::NEGATIVE);
         cpu.step(&mut m);
 
         assert_eq!(0x10, cpu.op);
@@ -1265,7 +1251,7 @@ mod test {
 
         assert_eq!(0xDEAD, cpu.pc);
         assert_eq!(0xFA, cpu.sp);
-        assert!(cpu.p.is_set(InterruptDisable));
+        assert!(cpu.p.contains(Status::INTERRUPT_DISABLE));
         assert_eq!(0, cpu.cycles);
     }
 }
