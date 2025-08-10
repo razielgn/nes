@@ -489,7 +489,7 @@ impl Ppu {
     }
 
     fn fetch_sprite_pattern<M: MutAccess>(
-        &mut self,
+        &self,
         mut row: u16,
         height: u16,
         mut tile: u8,
@@ -615,11 +615,11 @@ impl Ppu {
             (true, false) => sprite | 0x10,
             (false, true) => bg,
             (false, false) => {
-                if self.sprite_indexes[idx] == 0 {
-                    if x < 255 {
-                        self.status.set_sprite_zero_hit();
-                    }
+                if self.sprite_indexes[idx] == 0 && x < 255 {
+                    self.status.set_sprite_zero_hit();
+                }
 
+                if self.sprite_priorities[idx] == 0 {
                     sprite | 0x10
                 } else {
                     bg
@@ -685,7 +685,7 @@ impl Ppu {
         self.control.set(val);
     }
 
-    fn nmi_quirk_on_control_write(&mut self, val: u8) {
+    fn nmi_quirk_on_control_write(&self, val: u8) {
         if val.is_bit_set(7) {
             // affects test `ppu_vbl_nmi::nmi_{control,on_timing}`.
             if !self.control.nmi_at_next_vblank() && self.status.is_vblank_set() {
@@ -816,7 +816,7 @@ impl Ppu {
             _ => unreachable!(),
         };
 
-        (0x2000 + factor * 0x040 + offset) % 0x800
+        (factor * 0x400 + offset) % 0x800
     }
 
     fn write_to_data(&mut self, val: u8) {
