@@ -211,7 +211,7 @@ impl Nes {
     }
 
     #[must_use]
-    pub fn memory(&self) -> Memory {
+    pub fn memory(&self) -> Memory<'_> {
         Memory {
             ram: &self.ram,
             mapper: &self.mapper,
