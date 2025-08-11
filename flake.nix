@@ -41,7 +41,7 @@
             || (
               ((lib.hasInfix "/src" path) || (lib.hasInfix "/tests" path) || (lib.hasInfix "/benches" path))
               && (
-                (lib.hasSuffix ".log" path)
+                (lib.hasSuffix ".snap" path)
                 || (lib.hasSuffix ".nes" path)
                 || (craneLib.filterCargoSources path type)
               )
@@ -82,7 +82,9 @@
 
         nativeBuildInputs = with pkgs; [
           rustToolchain
+          cargo-insta
           cargo-outdated
+          mesen
         ];
       };
 

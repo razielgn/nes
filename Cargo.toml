@@ -28,6 +28,7 @@ bitflags = "2.9.1"
 pretty_assertions = "~1.4"
 colored = "~3.0"
 criterion = "~0.7"
+insta = "1.43.1"
 
 [profile.dev]
 opt-level = 1
