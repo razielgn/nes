@@ -818,8 +818,7 @@ impl Cpu {
 
     fn pop_p<M: MutAccess>(&mut self, mem: &mut M) {
         self.p = Status::from_bits_truncate(self.pop(mem));
-        self.p.remove(Status::BREAK);
-        self.p.insert(Status::UNUSED);
+        self.p.remove(Status::BREAK | Status::UNUSED);
     }
 }
 
