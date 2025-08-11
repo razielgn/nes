@@ -837,14 +837,12 @@ bitflags! {
         const UNUSED = 1 << 5;
         const OVERFLOW = 1 << 6;
         const NEGATIVE = 1 << 7;
-
-        const RESET = Self::INTERRUPT_DISABLE.bits() | Self::UNUSED.bits();
     }
 }
 
 impl Status {
     const fn new() -> Self {
-        Self::RESET
+        Self::INTERRUPT_DISABLE
     }
 
     fn set_if_zn(&mut self, val: u8) {
@@ -860,43 +858,6 @@ impl Status {
         self.set(Self::NEGATIVE, (val as i8) < 0);
     }
 }
-
-// #[derive(Debug, PartialEq, Clone, Copy)]
-// pub struct P(u8);
-
-// impl P {
-//     fn new() -> Self {
-//         P(0x24)
-//     }
-
-//     fn unset_if(&mut self, s: Status, v: bool) {
-//         self.set_if(s, !v);
-//     }
-
-//     fn set(&mut self, s: Status) {
-//         self.0.set_bit(s as u8);
-//     }
-
-//     fn unset(&mut self, s: Status) {
-//         self.0.clear_bit(s as u8);
-//     }
-
-//     fn is_set(self, s: Status) -> bool {
-//         self.0.is_bit_set(s as u8)
-//     }
-// }
-
-// impl From<u8> for P {
-//     fn from(p: u8) -> Self {
-//         P(p)
-//     }
-// }
-
-// impl From<P> for u8 {
-//     fn from(p: P) -> Self {
-//         p.0
-//     }
-// }
 
 #[cfg(test)]
 mod test {
