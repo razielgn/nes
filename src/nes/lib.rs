@@ -19,7 +19,7 @@ pub use controller::Button;
 use controller::Controller;
 pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
-use log::{debug, trace};
+use log::debug;
 use mappers::Mapper;
 pub use memory::{Access, Memory, MutAccess, MutMemory, Ram};
 use pin::Pin;
@@ -129,15 +129,19 @@ impl Nes {
         false
     }
 
-    pub fn controller_set(&mut self, button: Button) {
-        trace!("set button: {button:?}");
+    pub fn controller1_set(&mut self, button: Button) {
         self.controller1.set_button(button);
+    }
+
+    pub fn controller1_unset(&mut self, button: Button) {
+        self.controller1.unset_button(button);
+    }
+
+    pub fn controller2_set(&mut self, button: Button) {
         self.controller2.set_button(button);
     }
 
-    pub fn controller_unset(&mut self, button: Button) {
-        trace!("unset button: {button:?}");
-        self.controller1.unset_button(button);
+    pub fn controller2_unset(&mut self, button: Button) {
         self.controller2.unset_button(button);
     }
 

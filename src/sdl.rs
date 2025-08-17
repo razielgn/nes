@@ -1,6 +1,8 @@
+use log::{error, info, warn};
 use nes::{Button, Nes};
 use sdl2::{
     EventPump,
+    controller::Button as ControllerButton,
     event::Event,
     gfx::framerate::FPSManager,
     keyboard::Keycode,
@@ -19,6 +21,30 @@ pub fn run(nes: Nes, debug: bool, scale: u32) {
 
 fn run_normal(mut nes: Nes, scale: u32) {
     let sdl_context = sdl2::init().unwrap();
+
+    sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    let game_controller_subsystem = sdl_context.game_controller().unwrap();
+
+    let available = game_controller_subsystem.num_joysticks().unwrap_or(0);
+
+    for id in 0..available {
+        if !game_controller_subsystem.is_game_controller(id) {
+            warn!("Gamepad #{} is not a game controller", id);
+            continue;
+        }
+
+        info!("Attempting to open controller #{}", id);
+
+        match game_controller_subsystem.open(id) {
+            Ok(c) => {
+                info!("Opened gamepad #{}: `{}`", id, c.name());
+            }
+            Err(e) => {
+                error!("Failed to open gamepad #{}: {:?}", id, e);
+            }
+        }
+    }
+
     let video_subsystem = sdl_context.video().unwrap();
     video_subsystem.text_input().stop();
 
@@ -247,110 +273,76 @@ fn handle_input(nes: &mut Nes, event_pump: &mut EventPump) -> bool {
                 return true;
             }
             Event::KeyDown {
-                keycode: Some(Keycode::Down),
-                ..
-            } => {
-                nes.controller_set(Button::Down);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Down),
-                ..
-            } => {
-                nes.controller_unset(Button::Down);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Up),
-                ..
-            } => {
-                nes.controller_set(Button::Up);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Up),
-                ..
-            } => {
-                nes.controller_unset(Button::Up);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Right),
-                ..
-            } => {
-                nes.controller_set(Button::Right);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Right),
-                ..
-            } => {
-                nes.controller_unset(Button::Right);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Left),
-                ..
-            } => {
-                nes.controller_set(Button::Left);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Left),
-                ..
-            } => {
-                nes.controller_unset(Button::Left);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::Return),
-                ..
-            } => {
-                nes.controller_set(Button::Start);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::Return),
-                ..
-            } => {
-                nes.controller_unset(Button::Start);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::RShift),
-                ..
-            } => {
-                nes.controller_set(Button::Select);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::RShift),
-                ..
-            } => {
-                nes.controller_unset(Button::Select);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::A),
-                ..
-            } => {
-                nes.controller_set(Button::A);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::A),
-                ..
-            } => {
-                nes.controller_unset(Button::A);
-            }
-            Event::KeyDown {
-                keycode: Some(Keycode::S),
-                ..
-            } => {
-                nes.controller_set(Button::B);
-            }
-            Event::KeyUp {
-                keycode: Some(Keycode::S),
-                ..
-            } => {
-                nes.controller_unset(Button::B);
-            }
-            Event::KeyDown {
                 keycode: Some(Keycode::R),
                 ..
             } => {
                 nes.reset();
+            }
+            Event::KeyDown {
+                keycode: Some(keycode),
+                ..
+            } => {
+                if let Some(button) = map_keyboard_button(keycode) {
+                    nes.controller1_set(button);
+                }
+            }
+            Event::KeyUp {
+                keycode: Some(keycode),
+                ..
+            } => {
+                if let Some(button) = map_keyboard_button(keycode) {
+                    nes.controller1_unset(button);
+                }
+            }
+            Event::ControllerButtonDown { button, which, .. } => {
+                if let Some(button) = map_controller_button(button) {
+                    if which == 0 {
+                        nes.controller1_set(button);
+                    } else {
+                        nes.controller2_set(button);
+                    }
+                }
+            }
+            Event::ControllerButtonUp { button, which, .. } => {
+                if let Some(button) = map_controller_button(button) {
+                    if which == 0 {
+                        nes.controller1_unset(button);
+                    } else {
+                        nes.controller2_unset(button);
+                    }
+                }
             }
             _ => {}
         }
     }
 
     false
+}
+
+fn map_controller_button(b: ControllerButton) -> Option<Button> {
+    match b {
+        ControllerButton::A => Some(Button::A),
+        ControllerButton::B => Some(Button::B),
+        ControllerButton::DPadDown => Some(Button::Down),
+        ControllerButton::DPadUp => Some(Button::Up),
+        ControllerButton::DPadLeft => Some(Button::Left),
+        ControllerButton::DPadRight => Some(Button::Right),
+        ControllerButton::Start => Some(Button::Start),
+        ControllerButton::Back => Some(Button::Select),
+        _ => None,
+    }
+}
+
+fn map_keyboard_button(k: Keycode) -> Option<Button> {
+    match k {
+        Keycode::A => Some(Button::A),
+        Keycode::B => Some(Button::B),
+        Keycode::Down => Some(Button::Down),
+        Keycode::Up => Some(Button::Up),
+        Keycode::Left => Some(Button::Left),
+        Keycode::Right => Some(Button::Right),
+        Keycode::Return => Some(Button::Start),
+        Keycode::RShift => Some(Button::Select),
+        _ => None,
+    }
 }
