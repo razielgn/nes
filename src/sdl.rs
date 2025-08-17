@@ -24,11 +24,13 @@ fn run_normal(mut nes: Nes, scale: u32) {
 
     let screen_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
 
-    let window = video_subsystem
+    let mut window = video_subsystem
         .window("NES", screen_rect.width(), screen_rect.height())
         .position_centered()
         .build()
         .unwrap();
+
+    window.raise();
 
     let mut canvas = window
         .into_canvas()
@@ -118,7 +120,7 @@ fn run_debug(mut nes: Nes, scale: u32) {
         16 * 8 * scale,
     );
 
-    let window = video_subsystem
+    let mut window = video_subsystem
         .window(
             "NES",
             screen_rect.width()
@@ -131,6 +133,8 @@ fn run_debug(mut nes: Nes, scale: u32) {
         .position_centered()
         .build()
         .unwrap();
+
+    window.raise();
 
     let mut canvas = window
         .into_canvas()
