@@ -8,7 +8,7 @@ mod controller;
 mod cpu;
 mod debug;
 mod instruction;
-mod mapper;
+mod mappers;
 mod memory;
 mod pin;
 mod ppu;
@@ -19,21 +19,34 @@ pub use controller::Button;
 use controller::Controller;
 pub use cpu::{Cpu, Cycles};
 use debug::DebugState;
-use log::{debug, info, trace};
-use mapper::Mapper;
-pub use memory::{Access, Memory, MutMemory, Ram};
+use log::{debug, trace};
+use mappers::Mapper;
+pub use memory::{Access, Memory, MutAccess, MutMemory, Ram};
 use pin::Pin;
 use ppu::Ppu;
-pub use rom::{Mirroring, Rom};
+pub use rom::Rom;
 use std::{
+    cell::Cell,
     io::{self, Cursor, Write},
     path::Path,
+    rc::Rc,
 };
+
+const INIT_PC_ADDR: u16 = 0xFFFC;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mirroring {
+    #[default]
+    Horizontal,
+    Vertical,
+}
+
+pub type CurrentMirroring = Rc<Cell<Mirroring>>;
 
 #[derive(Clone)]
 pub struct Nes {
     cpu: Cpu,
-    mapper: Mapper,
+    mapper: Box<dyn Mapper>,
     ppu: Ppu,
     ram: Ram,
     controller1: Controller,
@@ -44,7 +57,7 @@ macro_rules! mut_memory {
     ($self:expr) => {
         MutMemory {
             ram: &mut $self.ram,
-            mapper: &mut $self.mapper,
+            mapper: $self.mapper.as_mut(),
             ppu: &mut $self.ppu,
             controller1: &mut $self.controller1,
             controller2: &mut $self.controller2,
@@ -66,19 +79,12 @@ impl Nes {
 
     #[must_use]
     pub fn from_rom(rom: Rom) -> Self {
-        info!("Mapper ID: {:03}", rom.mapper_id);
-        info!("Mirroring: {:?}", rom.mirroring);
-
-        info!("PRG ROM: {} x 16 KiB", rom.prg_banks);
-        info!("CHR ROM: {} x  8 KiB", rom.chr_banks);
-
-        let mapper = Mapper::new(rom);
-        let pc = mapper.read_word(0xFFFC);
+        let (mapper, current_mirroring) = mappers::load(rom);
+        let pc = mapper.read_word(INIT_PC_ADDR);
         let nmi_pin = Pin::default();
 
         let cpu = Cpu::with_pc_and_nmi_pin(pc, nmi_pin.clone());
-        let mut ppu = Ppu::new(nmi_pin);
-        ppu.set_mirroring(mapper.rom.mirroring);
+        let ppu = Ppu::new(nmi_pin, current_mirroring);
 
         Self {
             cpu,
@@ -91,9 +97,9 @@ impl Nes {
     }
 
     pub fn debug_step(&mut self) -> DebugState {
-        let prev = self.clone();
+        let prev = Box::new(self.clone());
         self.step();
-        let curr = self.clone();
+        let curr = Box::new(self.clone());
 
         DebugState { prev, curr }
     }
@@ -107,7 +113,8 @@ impl Nes {
         };
 
         for _ in 0..cycles * 3 {
-            self.ppu.step(&mut self.mapper);
+            self.ppu.step(self.mapper.as_mut());
+            self.mapper.step();
         }
 
         cycles
@@ -214,7 +221,7 @@ impl Nes {
     pub fn memory(&self) -> Memory<'_> {
         Memory {
             ram: &self.ram,
-            mapper: &self.mapper,
+            mapper: self.mapper.as_ref(),
             ppu: &self.ppu,
         }
     }

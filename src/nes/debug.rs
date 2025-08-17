@@ -1,12 +1,13 @@
 use crate::{
-    Nes, bits::HighLowBits, instruction::AddressingMode::*,
-    instruction::Label::*, memory::Access,
+    Access, Nes,
+    bits::HighLowBits,
+    instruction::{AddressingMode::*, Label::*},
 };
 use std::fmt::{self, Display, Formatter};
 
 pub struct DebugState {
-    pub prev: Nes,
-    pub curr: Nes,
+    pub prev: Box<Nes>,
+    pub curr: Box<Nes>,
 }
 
 impl Display for DebugState {

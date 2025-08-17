@@ -23,6 +23,7 @@ simplelog = "~0.12"
 sdl2 = { version = "~0.38", features = ["gfx"] }
 clap = { version = "~4.5", features = ["derive"] }
 bitflags = "2.9.1"
+dyn-clone = "1.0.20"
 
 [dev-dependencies]
 pretty_assertions = "~1.4"

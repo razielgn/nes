@@ -1,8 +1,7 @@
 use crate::{
+    MutAccess, Pin,
     bits::{BitOps, HighLowBits},
     instruction::{AddressingMode, Label, Label::*},
-    memory::MutAccess,
-    pin::Pin,
 };
 use bitflags::bitflags;
 use log::{debug, trace};

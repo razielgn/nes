@@ -1,4 +1,5 @@
-use crate::bits::BitOps;
+use crate::{Mirroring, bits::BitOps};
+use log::info;
 use nom::{
     IResult,
     bytes::complete::{tag, take},
@@ -9,12 +10,6 @@ use std::{fs, path::Path};
 const PRG_SIZE: usize = 0x4000;
 const CHR_SIZE: usize = 0x2000;
 const SRAM_SIZE: usize = 0x2000;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Mirroring {
-    Horizontal,
-    Vertical,
-}
 
 #[derive(Clone)]
 pub struct Rom {
@@ -38,6 +33,10 @@ impl Rom {
     #[must_use]
     pub fn from_buf(buf: &[u8]) -> Self {
         let (_, rom) = Self::parse(buf).expect("failed to parse rom"); // TODO: error handling
+
+        info!("PRG ROM: {} x 16 KiB", rom.prg_banks);
+        info!("CHR ROM: {} x  8 KiB", rom.chr_banks);
+
         rom
     }
 

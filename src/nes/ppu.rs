@@ -1,4 +1,4 @@
-use crate::{bits::BitOps, memory::MutAccess, pin::Pin, rom::Mirroring};
+use crate::{CurrentMirroring, Mapper, Mirroring, Pin, bits::BitOps};
 use log::{debug, trace};
 use std::{hint::unreachable_unchecked, mem};
 
@@ -11,8 +11,8 @@ enum Frame {
 impl Frame {
     fn next(self) -> Self {
         match self {
-            Frame::Even => Frame::Odd,
-            Frame::Odd => Frame::Even,
+            Self::Even => Self::Odd,
+            Self::Odd => Self::Even,
         }
     }
 }
@@ -159,11 +159,11 @@ pub struct Ppu {
     prev_screen: [u8; 256 * 240],
     pub(crate) frame_ready: bool,
 
-    mirroring: Mirroring,
+    mirroring: CurrentMirroring,
 }
 
 impl Ppu {
-    pub fn new(nmi_pin: Pin) -> Self {
+    pub fn new(nmi_pin: Pin, mirroring: CurrentMirroring) -> Self {
         Self {
             status: Status::default(),
             control: Control::default(),
@@ -193,20 +193,16 @@ impl Ppu {
             current_screen: [0; 256 * 240],
             prev_screen: [0; 256 * 240],
             frame_ready: false,
-            mirroring: Mirroring::Vertical,
             sprite_count: 0,
             sprite_patterns: [0; 8],
             sprite_positions: [0; 8],
             sprite_priorities: [0; 8],
             sprite_indexes: [0; 8],
+            mirroring,
         }
     }
 
-    pub fn set_mirroring(&mut self, mirroring: Mirroring) {
-        self.mirroring = mirroring;
-    }
-
-    pub fn mut_read<M: MutAccess>(&mut self, addr: u16, mapper: &mut M) -> u8 {
+    pub fn mut_read(&mut self, addr: u16, mapper: &mut dyn Mapper) -> u8 {
         let val = match addr % 8 {
             0 | 1 | 3 | 5 | 6 => self.open_bus.as_u8(),
             2 => self.status(),
@@ -261,7 +257,7 @@ impl Ppu {
         &self.palette_ram
     }
 
-    pub fn step<M: MutAccess>(&mut self, mapper: &mut M) {
+    pub fn step(&mut self, mapper: &mut dyn Mapper) {
         trace!(
             "step cycle {:3}, scanline {:3}, frame {:4?}",
             self.cycle, self.scanline, self.frame
@@ -398,7 +394,7 @@ impl Ppu {
         }
     }
 
-    fn load_tiles<M: MutAccess>(&mut self, mapper: &mut M) {
+    fn load_tiles(&mut self, mapper: &mut dyn Mapper) {
         self.shift_pattern_low <<= 1;
         self.shift_pattern_high <<= 1;
         self.shift_attribute_low <<= 1;
@@ -452,7 +448,7 @@ impl Ppu {
         }
     }
 
-    fn evaluate_sprites<M: MutAccess>(&mut self, mapper: &mut M) {
+    fn evaluate_sprites(&mut self, mapper: &mut dyn Mapper) {
         self.sprite_count = 0;
 
         let height = self.control.sprite_height();
@@ -488,13 +484,13 @@ impl Ppu {
         }
     }
 
-    fn fetch_sprite_pattern<M: MutAccess>(
+    fn fetch_sprite_pattern(
         &self,
         mut row: u16,
         height: u16,
         mut tile: u8,
         attributes: u8,
-        mapper: &mut M,
+        mapper: &mut dyn Mapper,
     ) -> u32 {
         let addr = if height == 8 {
             if attributes.is_bit_set(7) {
@@ -593,7 +589,7 @@ impl Ppu {
         (0, 0)
     }
 
-    fn draw_pixel<M: MutAccess>(&mut self, mapper: &mut M) {
+    fn draw_pixel(&mut self, mapper: &mut dyn Mapper) {
         let x = self.cycle.wrapping_sub(1);
         let y = self.scanline;
 
@@ -636,7 +632,7 @@ impl Ppu {
         self.current_screen[idx as usize] = color;
     }
 
-    fn read_color<M: MutAccess>(&self, palette_idx: u8, mapper: &mut M) -> u8 {
+    fn read_color(&self, palette_idx: u8, mapper: &mut dyn Mapper) -> u8 {
         let addr = 0x3F00 + u16::from(palette_idx);
         self.mem_read(addr, mapper) & 0x3F
     }
@@ -667,7 +663,7 @@ impl Ppu {
     fn status_read_only(&self) -> u8 {
         let mut ret = self.status.as_u8();
 
-        if let (VBLANK_START_SCANLINE, 2) = (self.scanline, self.cycle) {
+        if (self.scanline, self.cycle) == (VBLANK_START_SCANLINE, 2) {
             ret.clear_bit(7);
         }
 
@@ -760,7 +756,7 @@ impl Ppu {
     }
 
     // $2007
-    fn mut_read_from_data<M: MutAccess>(&mut self, mapper: &mut M) -> u8 {
+    fn mut_read_from_data(&mut self, mapper: &mut dyn Mapper) -> u8 {
         let addr = self.vram_addr.get();
         self.inc_vram_addr();
 
@@ -773,7 +769,7 @@ impl Ppu {
         val
     }
 
-    fn mem_read<M: MutAccess>(&self, addr: u16, mapper: &mut M) -> u8 {
+    fn mem_read(&self, addr: u16, mapper: &mut dyn Mapper) -> u8 {
         match addr {
             // Pattern Tables
             0x0000..=0x1FFF => mapper.mut_read(addr),
@@ -810,7 +806,7 @@ impl Ppu {
         let table = addr / 0x0400;
         let offset = addr % 0x0400;
 
-        let factor = match (self.mirroring, table) {
+        let factor = match (self.mirroring.get(), table) {
             (Horizontal, 0 | 1) | (Vertical, 0 | 2) => 0,
             (Horizontal, 2 | 3) | (Vertical, 1 | 3) => 1,
             _ => unreachable!(),
@@ -1154,7 +1150,10 @@ impl OpenBus {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::{
+        Access, CurrentMirroring, Mapper, MutAccess, Pin, Ppu, bits::BitOps,
+        ppu::Frame,
+    };
     use pretty_assertions::assert_eq;
     use std::iter;
 
@@ -1225,7 +1224,20 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
     struct DummyMapper;
+
+    impl Mapper for DummyMapper {
+        fn name(&self) -> &'static str {
+            "DUMMY"
+        }
+    }
+
+    impl Access for DummyMapper {
+        fn read(&self, _addr: u16) -> u8 {
+            0
+        }
+    }
 
     impl MutAccess for DummyMapper {
         fn mut_read(&mut self, _addr: u16) -> u8 {
@@ -1236,7 +1248,7 @@ mod tests {
     }
 
     fn build_ppu() -> (Ppu, DummyMapper) {
-        let ppu = Ppu::new(Pin::default());
+        let ppu = Ppu::new(Pin::default(), CurrentMirroring::default());
         (ppu, DummyMapper)
     }
 

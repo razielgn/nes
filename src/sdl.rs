@@ -20,6 +20,7 @@ pub fn run(nes: Nes, debug: bool, scale: u32) {
 fn run_normal(mut nes: Nes, scale: u32) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    video_subsystem.text_input().stop();
 
     let screen_rect = Rect::new(0, 0, 256 * scale, 240 * scale);
 
@@ -93,6 +94,7 @@ fn run_normal(mut nes: Nes, scale: u32) {
 fn run_debug(mut nes: Nes, scale: u32) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    video_subsystem.text_input().stop();
 
     let margin = 20 * scale;
 

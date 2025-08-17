@@ -1,6 +1,4 @@
-use crate::{
-    bits::HighLowBits, controller::Controller, mapper::Mapper, ppu::Ppu,
-};
+use crate::{Controller, Mapper, Ppu, bits::HighLowBits};
 use log::debug;
 
 pub trait MutAccess {
@@ -71,7 +69,7 @@ impl Ram {
 
 pub struct MutMemory<'a> {
     pub ram: &'a mut Ram,
-    pub mapper: &'a mut Mapper,
+    pub mapper: &'a mut dyn Mapper,
     pub ppu: &'a mut Ppu,
     pub controller1: &'a mut Controller,
     pub controller2: &'a mut Controller,
@@ -126,7 +124,7 @@ impl MutAccess for MutMemory<'_> {
 
 pub struct Memory<'a> {
     pub ram: &'a Ram,
-    pub mapper: &'a Mapper,
+    pub mapper: &'a dyn Mapper,
     pub ppu: &'a Ppu,
 }
 

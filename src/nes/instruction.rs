@@ -1,6 +1,6 @@
 use self::{AddressingMode::*, Label::*};
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AddressingMode {
     None,
     Implied,

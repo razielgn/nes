@@ -1,17 +1,14 @@
-use crate::{
-    memory::{Access, MutAccess},
-    rom::Rom,
-};
+use crate::{Access, Mapper, MutAccess, Rom};
 
 #[derive(Clone)]
-pub struct Mapper {
+pub struct Nrom {
     pub rom: Rom,
     banks: usize,
     bank1: usize,
     bank2: usize,
 }
 
-impl Mapper {
+impl Nrom {
     pub fn new(rom: Rom) -> Self {
         let banks = rom.prg.len() / 0x4000;
 
@@ -24,7 +21,13 @@ impl Mapper {
     }
 }
 
-impl Access for Mapper {
+impl Mapper for Nrom {
+    fn name(&self) -> &'static str {
+        "NROM"
+    }
+}
+
+impl Access for Nrom {
     fn read(&self, addr: u16) -> u8 {
         let addr = addr as usize;
 
@@ -38,19 +41,17 @@ impl Access for Mapper {
             }
             0x6000..=0x7FFF => self.rom.sram[addr - 0x6000],
             0x8000..=0xBFFF => {
-                let idx = self.bank1 * 0x4000 + (addr - 0x8000);
-                self.rom.prg[idx]
+                self.rom.prg[self.bank1 * 0x4000 + (addr - 0x8000)]
             }
             0xC000..=0xFFFF => {
-                let idx = self.bank2 * 0x4000 + (addr - 0xC000);
-                self.rom.prg[idx]
+                self.rom.prg[self.bank2 * 0x4000 + (addr - 0xC000)]
             }
             _ => unreachable!("mapper: accessed 0x{:04X}", addr),
         }
     }
 }
 
-impl MutAccess for Mapper {
+impl MutAccess for Nrom {
     fn mut_read(&mut self, addr: u16) -> u8 {
         self.read(addr)
     }
