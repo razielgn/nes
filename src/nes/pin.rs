@@ -21,7 +21,7 @@ impl Pin {
     }
 
     pub fn decr_delay(&self) {
-        let (delay, state) = self.0.get();
-        self.0.set((delay.saturating_sub(1), state));
+        self.0
+            .update(|(delay, state)| (delay.saturating_sub(1), state));
     }
 }
