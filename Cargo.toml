@@ -29,7 +29,7 @@ dyn-clone = "1.0.20"
 pretty_assertions = "~1.4"
 colored = "~3.0"
 criterion = "~0.7"
-insta = "1.43.1"
+insta = "1.43.2"
 
 [profile.dev]
 opt-level = 1
